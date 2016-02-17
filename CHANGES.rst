@@ -8,4 +8,4 @@
 
 - 'Normal' numeric clock
 
-- Modes: TM (time), LO (layout), GM (game)
+- Modes: TM (time), LO (layout), GM (game), CO (color)

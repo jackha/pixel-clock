@@ -35,6 +35,8 @@ Encoder rot_enc(6, 5);  // rotary encoder: D5, D6
 #define PGM_MODE_TM 0  // time
 #define PGM_MODE_LO 1  // layout
 #define PGM_MODE_GM 2  // game
+#define PGM_MODE_CO 3  // color
+
 #define PGM_MODE_SWITCH_DELAY 1000
 
 // in tm mode, every b press advances the time edit mode
@@ -156,6 +158,32 @@ static const unsigned char bitmaps[] PROGMEM = {
   0b10101001,
 };
 
+#define BITMAP_CLR_CO 0
+
+static const unsigned char bitmaps_co[] PROGMEM = {
+  0x00, 0x00, 0x00,  0x40, 0x00, 0x00,  0x40, 0x00, 0x00,  0x00, 0x00, 0x00,  0x00, 0x00, 0x00,  0x00, 0x00, 0x20,  0x00, 0x00, 0x20,  0x00, 0x00, 0x00,  
+  0x40, 0x00, 0x00,  0x00, 0x00, 0x00,  0x00, 0x40, 0x00,  0x00, 0x00, 0x00,  0x00, 0x00, 0x00,  0x00, 0x00, 0x20,  0x00, 0x00, 0x00,  0x00, 0x00, 0x20,  
+  0x40, 0x00, 0x00,  0x00, 0x00, 0x00,  0x00, 0x40, 0x00,  0x00, 0x00, 0x00,  0x00, 0x00, 0x00,  0x00, 0x00, 0x20,  0x00, 0x00, 0x00,  0x00, 0x00, 0x20,  
+  0x40, 0x00, 0x00,  0x00, 0x00, 0x00,  0x00, 0x40, 0x00,  0x00, 0x00, 0x00,  0x00, 0x00, 0x00,  0x00, 0x00, 0x20,  0x00, 0x00, 0x20,  0x00, 0x00, 0x00,  
+  0x40, 0x00, 0x00,  0x00, 0x00, 0x00,  0x00, 0x40, 0x00,  0x00, 0x00, 0x00,  0x00, 0x00, 0x00,  0x00, 0x00, 0x20,  0x00, 0x00, 0x20,  0x00, 0x00, 0x00,  
+  0x40, 0x00, 0x00,  0x00, 0x00, 0x00,  0x00, 0x40, 0x00,  0x00, 0x00, 0x00,  0x00, 0x00, 0x00,  0x00, 0x00, 0x20,  0x00, 0x00, 0x00,  0x00, 0x00, 0x20,  
+  0x40, 0x00, 0x00,  0x00, 0x00, 0x00,  0x00, 0x40, 0x00,  0x00, 0x40, 0x00,  0x00, 0x40, 0x00,  0x00, 0x00, 0x20,  0x00, 0x00, 0x00,  0x00, 0x00, 0x20,  
+  0x00, 0x00, 0x00,  0x40, 0x00, 0x00,  0x40, 0x00, 0x00,  0x00, 0x00, 0x00,  0x00, 0x00, 0x00,  0x00, 0x00, 0x20,  0x00, 0x00, 0x00,  0x00, 0x00, 0x20,  
+};
+
+static const unsigned char colors[] PROGMEM = {
+  40,  0,  0,   25, 15,  0,
+  30, 10,  0,   20, 20,  0,
+   0, 40,  0,   20, 20,  0,
+   0, 30, 20,    0, 10, 10,
+   0,  0, 40,    0, 20, 10,
+  20,  0, 30,   20,  0, 10,
+  20, 20, 20,   10, 10, 30,
+};
+
+#define NUM_COLORS 7
+
+
 long enc_pos  = -999;  // rotary encoder position
 volatile long new_enc_pos = -999;
 uint16_t fast_counter = 0;  // just cycles, for use in timing / moving stuff other than seconds
@@ -195,6 +223,8 @@ int last_but_a_val = HIGH;
 int last_but_b_val = HIGH;
 int but_a_val = HIGH;
 int but_b_val = HIGH;
+
+int color_idx = 0;
 
 uint16_t ldr_value;
 uint16_t brightness;
@@ -262,13 +292,15 @@ void setup ()
       pixels.show();
 
   // set some variables
-  col_a.r = 40;
-  col_a.g = 0;
-  col_a.b = 0;
-
-  col_b.r = 20;
-  col_b.g = 20;
-  col_b.b = 0;
+  color_idx = 0;
+  set_colors(color_idx);
+//  col_a.r = 40;
+//  col_a.g = 0;
+//  col_a.b = 0;
+//
+//  col_b.r = 20;
+//  col_b.g = 20;
+//  col_b.b = 0;
 
   // prevent readouts on start
   new_enc_pos = rot_enc.read();
@@ -276,6 +308,16 @@ void setup ()
 }
 
 uint32_t old_ts;
+
+void set_colors(int color_idx) {
+  col_a.r = pgm_read_byte(colors+color_idx*6);
+  col_a.g = pgm_read_byte(colors+color_idx*6+1);
+  col_a.b = pgm_read_byte(colors+color_idx*6+2);
+
+  col_b.r = pgm_read_byte(colors+color_idx*6+3);
+  col_b.g = pgm_read_byte(colors+color_idx*6+4);
+  col_b.b = pgm_read_byte(colors+color_idx*6+5);
+}
 
 void set_pixel(int offset, uint32_t r, uint32_t g, uint32_t b, uint32_t brightness) {
   // brightness 0..1023
@@ -313,6 +355,21 @@ void display_bitmap(int offset, byte r, byte g, byte b) {
   pixels.show();
 }
 
+
+void display_color_bitmap(int offset) {
+  byte r, g, b;
+  pixels.clear();
+  for (int y=0; y<8; y++) {
+    for (int x=0; x<8; x++) {
+      r = pgm_read_byte(bitmaps_co+y*3*8+x*3);
+      g = pgm_read_byte(bitmaps_co+y*3*8+x*3+1);
+      b = pgm_read_byte(bitmaps_co+y*3*8+x*3+2);
+      pixels.setPixelColor(x + y * 8, pixels.Color(r, g, b));
+    }
+  }
+  pixels.show();
+}
+
 // normal clock with digits from 'font'
 void draw_normal_clock(DateTime dt) {
   draw_single_digit(0, 1, dt.hour() / 10, col_a.r, col_a.g, col_a.b);
@@ -320,7 +377,7 @@ void draw_normal_clock(DateTime dt) {
   draw_single_digit(4, 1, dt.minute() / 10, col_a.r, col_a.g, col_a.b);
   draw_single_digit(6, 1, dt.minute() % 10, col_b.r, col_b.g, col_b.b);
   if (dt.second() % 2 == 0) {
-    pixels.setPixelColor(7*8, pixels.Color(1,0,0));
+    pixels.setPixelColor(7*8, pixels.Color(col_b.r,col_b.g,col_b.b));
   }
 }
 
@@ -511,6 +568,7 @@ void loop ()
                 // save hour
                 dt = DateTime(now.year(), now.month(), now.date(), max(min(now.hour()+hour_inc, 23), 0), now.minute(), now.second(), now.dayOfWeek());
                 rtc.setDateTime(dt); //Adjust date-time as defined 'dt' above 
+                hour_inc = 0;  // it is set now
                 rot_enc.write(0);
                 enc_pos = new_enc_pos;
                 break;
@@ -555,10 +613,10 @@ void loop ()
         case PGM_MODE_GM:
           // button a readout
           if ((last_but_a_val == HIGH) && (but_a_val == LOW)) {
-            pgm_mode = PGM_MODE_TM;
+            pgm_mode = PGM_MODE_CO;
             rot_enc.write(0);
             enc_pos = new_enc_pos;
-            display_bitmap(BITMAP_TM, 0, 0, 4);
+            display_color_bitmap(BITMAP_CLR_CO);
             delay(PGM_MODE_SWITCH_DELAY);
           }
           if ((last_but_b_val == HIGH) && (but_b_val == LOW)) {
@@ -567,6 +625,27 @@ void loop ()
           // encoder readout
           if (new_enc_pos != enc_pos) {
           }
+          break;
+        case PGM_MODE_CO:
+          // button a readout
+          if ((last_but_a_val == HIGH) && (but_a_val == LOW)) {
+            pgm_mode = PGM_MODE_TM;
+            rot_enc.write(0);
+            enc_pos = new_enc_pos;
+            display_bitmap(BITMAP_TM, 0, 0, 4);
+            delay(PGM_MODE_SWITCH_DELAY);
+          }
+          if ((last_but_b_val == HIGH) && (but_b_val == LOW)) {
+          }
+          // encoder readout
+          if (new_enc_pos < 0) {
+            new_enc_pos += NUM_COLORS;
+            rot_enc.write(new_enc_pos);
+          }
+          color_idx = (new_enc_pos / 4) % NUM_COLORS;
+          set_colors(color_idx);
+//          if (new_enc_pos != enc_pos) {
+//          }
           break;
       }
     
@@ -610,7 +689,7 @@ void loop ()
           break;
         }
 
-      // ldr brightness testing
+//      // ldr brightness testing
 //      for (uint16_t i=0; i<8; i++) {
 //        if ((1023 - ldr_value) / 4 / 16 / 2 > i) {
 //          pixels.setPixelColor(i, pixels.Color(0,0,2));
