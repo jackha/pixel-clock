@@ -24,15 +24,22 @@ Encoder rot_enc(A2, A1);  // rotary encoder: D5, D6
 #define NEOPIXEL_PIN 9  // we plug an 8x8 onto it
 #define NEOPIXEL_NUM 64
 
-#define MODE_NORMAL 0  // use the 2x5 font
-#define MODE_BCD 1 // binary coded digital 
-#define MODE_ANALOG 2  // use pixel arms
-#define MODE_PARTY 3  // no clock - just colors!
-#define MODE_HEX 4  // jack's hex clock: a day is 0x0000..0xFFFF, where the highest byte is displayed as hex and lowest as bits
-
 #define MODE_SET_CLOCK 99 // go to this mode temporary and then go back to the old mode 
 
-#define NUM_CLOCK_MODES 5  //
+#define MODE_NORMAL 0  // use the 2x5 font
+#define MODE_NORMAL_REV 1  // use the 2x5 font
+#define MODE_NORMAL_ALT 2  // use the 2x5 font
+#define MODE_NORMAL_ALT_REV 3  // use the 2x5 font
+#define MODE_NORMAL_ALT2 4  // use the 2x5 font
+#define MODE_NORMAL_ALT2_REV 5  // use the 2x5 font
+#define MODE_NORMAL_ALT3 6  // use the 2x5 font
+#define MODE_NORMAL_ALT3_REV 7  // use the 2x5 font
+#define MODE_BCD 8 // binary coded digital 
+#define MODE_ANALOG 9  // use pixel arms
+#define MODE_PARTY 10  // no clock - just colors!
+#define MODE_HEX 11  // jack's hex clock: a day is 0x0000..0xFFFF, where the highest byte is displayed as hex and lowest as bits
+
+#define NUM_CLOCK_MODES 12  //
 
 // every time you press button A, the program mode advances
 #define PGM_MODE_TM 0  // time
@@ -257,6 +264,105 @@ static const unsigned char font4x7[] PROGMEM = {
   0b1000,
   0b1000,
   0b1000,
+};
+
+// hex font
+static const unsigned char font3x5[] PROGMEM = {
+  0b010,
+  0b101,
+  0b101,
+  0b101,
+  0b010,
+
+  0b010,
+  0b010,
+  0b010,
+  0b010,
+  0b010,
+
+  0b110,
+  0b001,
+  0b010,
+  0b100,
+  0b111,
+
+  0b111,
+  0b001,
+  0b111,
+  0b001,
+  0b111,
+
+  0b101,
+  0b101,
+  0b111,
+  0b001,
+  0b001,
+
+  0b111,
+  0b100,
+  0b110,
+  0b001,
+  0b110,
+
+  0b010,
+  0b100,
+  0b111,
+  0b101,
+  0b111,
+
+  0b111,
+  0b001,
+  0b010,
+  0b010,
+  0b010,
+
+  0b111,
+  0b101,
+  0b111,
+  0b101,
+  0b111,
+
+  0b111,
+  0b101,
+  0b111,
+  0b001,
+  0b010,
+
+  0b010,
+  0b101,
+  0b111,
+  0b101,
+  0b101,
+
+  0b110,
+  0b101,
+  0b110,
+  0b101,
+  0b110,
+
+  0b011,
+  0b100,
+  0b100,
+  0b100,
+  0b011,
+
+  0b110,
+  0b101,
+  0b101,
+  0b101,
+  0b110,
+
+  0b111,
+  0b100,
+  0b111,
+  0b100,
+  0b111,
+
+  0b111,
+  0b100,
+  0b111,
+  0b100,
+  0b100,
 };
 
 #define BITMAP_TM 0
@@ -541,6 +647,28 @@ void draw_single_digit_4x7(int xx, int yy, int digit, byte r, byte g, byte b) {
   }
 }
 
+// draw single digit on x, y location with 4x7 font
+void draw_single_digit_3x5(int xx, int yy, int digit, byte r, byte g, byte b) {
+  byte digit_row;
+  for (int y=0; y<5; y++) {
+    digit_row = pgm_read_byte(font3x5+y+digit*5);
+    for (int x=0; x<3; x++) {
+      if ((digit_row & 0b1) > 0) {
+        set_pixel(xx + 2 - x + (yy + y) * 8, r, g, b, brightness);
+      }
+      digit_row = digit_row >> 1;
+    }
+  }
+}
+
+void wait_button_up() {
+    // wait button up
+    while (but_a_val == LOW) {
+        but_a_val = digitalRead(BUT_A_PIN);
+    }
+    last_but_a_val = but_a_val;
+}
+
 /***************************************************************************/
 void display_bitmap(int offset, byte r, byte g, byte b) {
   byte digit_row;
@@ -574,26 +702,33 @@ void display_color_bitmap(int offset) {
 
 /***************************************************************************/
 // normal clock with digits from 'font'
-void draw_normal_clock(DateTime dt) {
-  draw_single_digit(0, 1, dt.hour() / 10, col_a.r, col_a.g, col_a.b);
-  draw_single_digit(2, 1, dt.hour() % 10, col_b.r, col_b.g, col_b.b);
-  draw_single_digit(4, 1, dt.minute() / 10, col_a.r, col_a.g, col_a.b);
-  draw_single_digit(6, 1, dt.minute() % 10, col_b.r, col_b.g, col_b.b);
+void draw_normal_clock(DateTime dt, RGB col_a, RGB col_b, int y0, int y1, int y2, int y3, int dot_location) {
+  draw_single_digit(0, y0, dt.hour() / 10, col_a.r, col_a.g, col_a.b);
+  draw_single_digit(2, y1, dt.hour() % 10, col_b.r, col_b.g, col_b.b);
+  draw_single_digit(4, y2, dt.minute() / 10, col_a.r, col_a.g, col_a.b);
+  draw_single_digit(6, y3, dt.minute() % 10, col_b.r, col_b.g, col_b.b);
   if (dt.second() % 2 == 0) {
-    set_pixel(7*8, col_b.r,col_b.g,col_b.b, brightness);
+    set_pixel(dot_location, col_b.r,col_b.g,col_b.b, brightness);
   }
 }
 
 /***************************************************************************/
 void draw_edit_clock(DateTime dt, int hour_inc, int minute_inc) {
   // make it blink
-  if ((pgm_mode_tm_state == PGM_TM_MINUTE) || ((fast_counter >> 6) % 2 == 0)) {
-    draw_single_digit(0, 1, max(min(dt.hour() + hour_inc, 23), 0) / 10, col_a.r, col_a.g, col_a.b);
-    draw_single_digit(2, 1, max(min(dt.hour() + hour_inc, 23), 0) % 10, col_b.r, col_b.g, col_b.b);
-  }
-  if ((pgm_mode_tm_state == PGM_TM_HOUR) || ((fast_counter >> 6) % 2 == 0)) {
-    draw_single_digit(4, 1, max(min(dt.minute() + minute_inc, 59), 0) / 10, col_a.r, col_a.g, col_a.b);
-    draw_single_digit(6, 1, max(min(dt.minute() + minute_inc, 59), 0) % 10, col_b.r, col_b.g, col_b.b);
+  if (pgm_mode_tm_state == PGM_TM_MINUTE) {
+    draw_single_digit(0, 1, dt.hour() / 10, col_a.r, col_a.g, col_a.b);
+    draw_single_digit(2, 1, dt.hour() % 10, col_b.r, col_b.g, col_b.b);
+    if ((fast_counter >> 6) % 2 == 0) {
+      draw_single_digit(4, 1, minute_inc / 10, col_a.r, col_a.g, col_a.b);
+      draw_single_digit(6, 1, minute_inc % 10, col_b.r, col_b.g, col_b.b);
+    }
+  } else if (pgm_mode_tm_state == PGM_TM_HOUR) {
+    if ((fast_counter >> 6) % 2 == 0) {
+      draw_single_digit(0, 1, hour_inc / 10, col_a.r, col_a.g, col_a.b);
+      draw_single_digit(2, 1, hour_inc % 10, col_b.r, col_b.g, col_b.b);
+    }
+    draw_single_digit(4, 1, dt.minute() / 10, col_a.r, col_a.g, col_a.b);
+    draw_single_digit(6, 1, dt.minute() % 10, col_b.r, col_b.g, col_b.b);
   }
 }
 
@@ -664,12 +799,13 @@ void draw_party(DateTime dt) {
 }
 /***************************************************************************/
 void draw_hex_clock(DateTime dt) {
-  float word_time_float;
+//  float word_time_float;
   unsigned int word_time;
-  word_time_float = (float(approx_millis)/1000 + (dt.hour()*60*60+dt.minute()*60+dt.second())) * 65536 / 86400;
-  word_time = int(word_time_float);
-  draw_single_digit_4x7(0, 0, word_time >> 12, col_a.r, col_a.g, col_a.b);
-  draw_single_digit_4x7(4, 0, (word_time >> 8) & 0xF, col_a.r, col_a.g, col_a.b);
+//  word_time_float = (float(approx_millis)/1000 + (dt.hour()*60*60+dt.minute()*60+dt.second())) * 65536 / 86400;
+//  word_time = int(word_time_float);
+  word_time = (dt.hour()*60*60+dt.minute()*60+dt.second()) * 65536 / 86400;
+  draw_single_digit_3x5(1, 1, word_time >> 12, col_a.r, col_a.g, col_a.b);
+  draw_single_digit_3x5(4, 1, (word_time >> 8) & 0xF, col_b.r, col_b.g, col_b.b);
   for (int x=0; x<8; x++) {
     if (word_time & (0x1 << (7-x))) {
       set_pixel(7*8+x, col_b.r, col_b.g, col_b.b, brightness);
@@ -815,17 +951,14 @@ void loop ()
               clock_mode = MODE_SET_CLOCK;
               pgm_mode = PGM_MODE_TM;
               pgm_mode_tm_state = PGM_TM_HOUR;
-              rot_enc.write(0);
-              hour_inc = 0;
+              rot_enc.write(now.hour()*4);
+              new_enc_pos = now.hour()*4;
+              hour_inc = now.hour();
               minute_inc = 0;
               enc_pos = new_enc_pos;
               display_bitmap(BITMAP_TM, 0, 4, 0);
             }
-            // wait button up
-            while (but_a_val == LOW) {
-              but_a_val = digitalRead(BUT_A_PIN);
-            }
-            last_but_a_val = but_a_val;
+            wait_button_up();
           }
       } else {
             but_counter = 0;
@@ -839,9 +972,11 @@ void loop ()
               case PGM_TM_HOUR:
                 pgm_mode_tm_state = PGM_TM_MINUTE;
                 // save hour
-                dt = DateTime(now.year(), now.month(), now.date(), max(min(now.hour()+hour_inc, 23), 0), now.minute(), now.second(), now.dayOfWeek());
+                dt = DateTime(now.year(), now.month(), now.date(), hour_inc, now.minute(), now.second(), now.dayOfWeek());
                 rtc.setDateTime(dt); //Adjust date-time as defined 'dt' above 
-                rot_enc.write(0);
+                rot_enc.write(now.minute()*4);
+                new_enc_pos = now.minute()*4;
+                minute_inc = now.minute();
                 hour_inc = 0;  // it is set now
                 //enc_pos = new_enc_pos;
                 break;
@@ -849,29 +984,42 @@ void loop ()
                 pgm_mode_tm_state = PGM_TM_NONE;
                 clock_mode = last_clock_mode;
                 // save minute
-                dt = DateTime(now.year(), now.month(), now.date(), now.hour(), max(min(now.minute() + minute_inc, 59), 0), now.second(), now.dayOfWeek());
+                dt = DateTime(now.year(), now.month(), now.date(), now.hour(), minute_inc, now.second(), now.dayOfWeek());
                 rtc.setDateTime(dt); //Adjust date-time as defined 'dt' above 
 
                 pgm_mode = PGM_MODE_LO;
                 display_bitmap(BITMAP_OK, 0, 4, 0);
                 delay(PGM_MODE_SWITCH_DELAY);
                 pgm_mode_tm_state = PGM_TM_NONE;
+                rot_enc.write(0);
 
                 break;
             }
           }
           // encoder readout
-          if (new_enc_pos != enc_pos) {
-            switch (pgm_mode_tm_state) {
-              case PGM_TM_HOUR:
-                // minute
-                hour_inc = new_enc_pos / 4;                 
-                break;
-              case PGM_TM_MINUTE:
-                // hour
-                minute_inc = new_enc_pos / 4;                 
-                break;
-            }
+          switch (pgm_mode_tm_state) {
+            case PGM_TM_HOUR:
+              if (new_enc_pos < 0) {
+                new_enc_pos += 24*4;
+                rot_enc.write(new_enc_pos);
+              }
+              if (new_enc_pos >= 24*4) {
+                new_enc_pos -= 24*4;
+                rot_enc.write(new_enc_pos);
+              }
+              hour_inc = new_enc_pos / 4;                
+              break;
+            case PGM_TM_MINUTE:
+              if (new_enc_pos < 0) {
+                new_enc_pos += 60*4;
+                rot_enc.write(new_enc_pos);
+              }
+              if (new_enc_pos >= 60*4) {
+                new_enc_pos -= 60*4;
+                rot_enc.write(new_enc_pos);
+              }
+              minute_inc = new_enc_pos / 4;                 
+              break;
           }
           break;
         case PGM_MODE_LO:
@@ -895,6 +1043,10 @@ void loop ()
           // encoder readout
           if (new_enc_pos != enc_pos) {
             game();
+            wait_button_up();
+            rot_enc.write(0);
+            enc_pos = 0;
+            new_enc_pos = 0;
           }
           // button a readout
           if ((last_but_a_val == LOW) && (but_a_val == HIGH)) {
@@ -936,7 +1088,28 @@ void loop ()
       pixels.clear();
       switch (clock_mode) {
         case MODE_NORMAL:
-          draw_normal_clock(now);
+          draw_normal_clock(now, col_a, col_b, 1, 1, 1, 1, 7*8);
+          break;
+        case MODE_NORMAL_REV:
+          draw_normal_clock(now, col_b, col_a, 1, 1, 1, 1, 7*8);
+          break;
+        case MODE_NORMAL_ALT:
+          draw_normal_clock(now, col_a, col_b, 0, 1, 2, 3, 7*8);
+          break;
+        case MODE_NORMAL_ALT_REV:
+          draw_normal_clock(now, col_b, col_a, 0, 1, 2, 3, 7*8);
+          break;
+        case MODE_NORMAL_ALT2:
+          draw_normal_clock(now, col_a, col_b, 3, 2, 1, 0, 7*8+7);
+          break;
+        case MODE_NORMAL_ALT2_REV:
+          draw_normal_clock(now, col_b, col_a, 3, 2, 1, 0, 7*8+7);
+          break;
+        case MODE_NORMAL_ALT3:
+          draw_normal_clock(now, col_a, col_b, 1, 2, 1, 2, 7*8);
+          break;
+        case MODE_NORMAL_ALT3_REV:
+          draw_normal_clock(now, col_b, col_a, 1, 2, 1, 2, 7*8);
           break;
         case MODE_BCD:
           draw_bcd_clock(now);
