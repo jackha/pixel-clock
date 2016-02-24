@@ -27,9 +27,12 @@ Encoder rot_enc(A2, A1);  // rotary encoder: D5, D6
 #define MODE_NORMAL 0  // use the 2x5 font
 #define MODE_BCD 1 // binary coded digital 
 #define MODE_ANALOG 2  // use pixel arms
+#define MODE_PARTY 3  // no clock - just colors!
+#define MODE_HEX 4  // jack's hex clock: a day is 0x0000..0xFFFF, where the highest byte is displayed as hex and lowest as bits
+
 #define MODE_SET_CLOCK 99 // go to this mode temporary and then go back to the old mode 
 
-#define NUM_CLOCK_MODES 3  //
+#define NUM_CLOCK_MODES 5  //
 
 // every time you press button A, the program mode advances
 #define PGM_MODE_TM 0  // time
@@ -125,20 +128,163 @@ static const unsigned char font[] PROGMEM = {
     0b10
 };
 
+// hex only
+static const unsigned char font4x7[] PROGMEM = {
+  0b0110,
+  0b1001,
+  0b1011,
+  0b1101,
+  0b1001,
+  0b1001,
+  0b0110,
+  
+  0b0100,
+  0b1100,
+  0b0100,
+  0b0100,
+  0b0100,
+  0b0100,
+  0b1110,
+  
+  0b0110,
+  0b1001,
+  0b0001,
+  0b0010,
+  0b0100,
+  0b1000,
+  0b1111,
+  
+  0b0110,
+  0b1001,
+  0b0001,
+  0b0110,
+  0b0001,
+  0b1001,
+  0b0110,
+  
+  0b1001,
+  0b1001,
+  0b1001,
+  0b1111,
+  0b0001,
+  0b0001,
+  0b0001,
+  
+  0b1111,
+  0b1000,
+  0b1000,
+  0b1110,
+  0b0001,
+  0b0001,
+  0b1110,
+  
+  0b0111,
+  0b1000,
+  0b1000,
+  0b1110,
+  0b1001,
+  0b1001,
+  0b0110,
+  
+  0b1111,
+  0b0001,
+  0b0010,
+  0b0100,
+  0b1000,
+  0b1000,
+  0b1000,
+  
+  0b0110,
+  0b1001,
+  0b1001,
+  0b0110,
+  0b1001,
+  0b1001,
+  0b0110,
+  
+  0b0110,
+  0b1001,
+  0b1001,
+  0b0111,
+  0b0001,
+  0b0001,
+  0b0110,
+  
+  0b0110,
+  0b1001,
+  0b1001,
+  0b1111,
+  0b1001,
+  0b1001,
+  0b1001,
+  
+  0b1110,
+  0b1001,
+  0b1001,
+  0b1110,
+  0b1001,
+  0b1001,
+  0b1110,
+  
+  0b0110,
+  0b1001,
+  0b1000,
+  0b1000,
+  0b1000,
+  0b1001,
+  0b0110,
+  
+  0b1100,
+  0b1010,
+  0b1001,
+  0b1001,
+  0b1001,
+  0b1001,
+  0b1100,
+  
+  0b1111,
+  0b1000,
+  0b1000,
+  0b1110,
+  0b1000,
+  0b1000,
+  0b1111,
+  
+  0b1111,
+  0b1000,
+  0b1000,
+  0b1111,
+  0b1000,
+  0b1000,
+  0b1000,
+};
+
 #define BITMAP_TM 0
 #define BITMAP_LO 8
 #define BITMAP_GM 16
+#define BITMAP_OK 24
+#define BITMAP_NO 32
 
 static const unsigned char bitmaps[] PROGMEM = {
-  0b11101110,
-  0b01000100,
-  0b01001110,
+  // 'set' aka 'time'
   0b00000000,
-  0b11110011,
-  0b10101011,
-  0b10101010,
-  0b00000011,
+  0b11011010,
+  0b10010011,
+  0b11011010,
+  0b01010010,
+  0b11011001,
+  0b00000000,
+  0b00000000,
+//  0b11101110,
+//  0b01000100,
+//  0b01001110,
+//  0b00000000,
+//  0b11110011,
+//  0b10101011,
+//  0b10101010,
+//  0b00000011,
 
+  // lo layout
   0b10000110,
   0b10001001,
   0b10001001,
@@ -148,6 +294,7 @@ static const unsigned char bitmaps[] PROGMEM = {
   0b00000000,
   0b00000000,
 
+  // game
   0b01000110,
   0b10001001,
   0b10101111,
@@ -156,7 +303,43 @@ static const unsigned char bitmaps[] PROGMEM = {
   0b11110011,
   0b10101010,
   0b10101001,
+
+  // ok
+  0b00000000,
+  0b01001001,
+  0b10101010,
+  0b10101100,
+  0b10101110,
+  0b10101001,
+  0b01001001,
+  0b00000000,
+
+  // no
+  0b00000000,
+  0b10010010,
+  0b11010101,
+  0b10110101,
+  0b10010101,
+  0b10010010,
+  0b00000000,
+  0b00000000,
 };
+
+
+// fill patterns for transitions. 8x8 with content 'time of change'
+#define FILL_PATTERN_1 0
+
+static const unsigned char fill_pattern[] PROGMEM = {
+  0x39, 0x38, 0x37, 0x36, 0x35, 0x34, 0x33, 0x32, 
+  0x3A, 0x1F, 0x1E, 0x1D, 0x1C, 0x1B, 0x1A, 0x31, 
+  0x3B, 0x20, 0x0D, 0x0C, 0x0B, 0x0A, 0x19, 0x30, 
+  0x3C, 0x21, 0x0E, 0x03, 0x02, 0x09, 0x18, 0x2F, 
+  0x3D, 0x22, 0x0F, 0x04, 0x01, 0x08, 0x17, 0x2E, 
+  0x3E, 0x23, 0x10, 0x05, 0x06, 0x07, 0x16, 0x2D, 
+  0x3F, 0x24, 0x11, 0x12, 0x13, 0x14, 0x15, 0x2C, 
+  0x40, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2A, 0x2B, 
+};
+
 
 #define BITMAP_CLR_CO 0
 
@@ -214,6 +397,9 @@ long enc_pos  = -999;  // rotary encoder position
 volatile long new_enc_pos = -999;
 uint16_t fast_counter = 0;  // just cycles, for use in timing / moving stuff other than seconds
 
+unsigned long start_approx_millis_time = 0;
+unsigned long approx_millis = 0;  // approximate millis
+
 Adafruit_NeoPixel pixels = Adafruit_NeoPixel(NEOPIXEL_NUM, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
 
 
@@ -239,7 +425,7 @@ int noteDurations[] = {
 
 int clock_mode = MODE_NORMAL;
 int last_clock_mode = MODE_NORMAL;
-int pgm_mode = PGM_MODE_TM;
+int pgm_mode = PGM_MODE_LO;
 
 int pgm_mode_tm_state = PGM_TM_NONE;
 int hour_inc = 0;  // increase/decrease hour because we want to change it - is auto modded (%)
@@ -249,6 +435,7 @@ int last_but_a_val = HIGH;
 int last_but_b_val = HIGH;
 int but_a_val = HIGH;
 int but_b_val = HIGH;
+int but_counter = 0;
 
 int color_idx = 0;
 
@@ -285,23 +472,6 @@ void setup ()
   TIMSK1 |= (1 << OCIE1A);
   sei();//allow interrupts
 
-  // test tones
-//    // iterate over the notes of the melody:
-//  for (int thisNote = 0; thisNote < 8; thisNote++) {
-//
-//    // to calculate the note duration, take one second
-//    // divided by the note type.
-//    //e.g. quarter note = 1000 / 4, eighth note = 1000/8, etc.
-//    int noteDuration = 1000 / noteDurations[thisNote];
-//    tone(9, melody[thisNote], noteDuration);
-//
-//    // to distinguish the notes, set a minimum time between them.
-//    // the note's duration + 30% seems to work well:
-//    int pauseBetweenNotes = noteDuration * 1.30;
-//    delay(pauseBetweenNotes);
-//    // stop the tone playing:
-//    noTone(9);
-//  }
     pinMode(BUT_A_PIN, INPUT_PULLUP);
     //pinMode(BUT_B_PIN, INPUT_PULLUP);
 
@@ -310,23 +480,11 @@ void setup ()
     Serial.begin(57600);
     Wire.begin();
     rtc.begin();
-
-    //rtc.setDateTime(dt); //Adjust date-time as defined 'dt' above 
-    // test
     pixels.begin();
-      pixels.setPixelColor(0, pixels.Color(0, 0, 5 ));  // test
-      pixels.show();
 
   // set some variables
   color_idx = 0;
   set_colors(color_idx);
-//  col_a.r = 40;
-//  col_a.g = 0;
-//  col_a.b = 0;
-//
-//  col_b.r = 20;
-//  col_b.g = 20;
-//  col_b.b = 0;
 
   // prevent readouts on start
   new_enc_pos = rot_enc.read();
@@ -334,7 +492,6 @@ void setup ()
 
     but_a_val = digitalRead(BUT_A_PIN);
     last_but_a_val = but_a_val;
-
 }
 
 uint32_t old_ts;
@@ -370,6 +527,21 @@ void draw_single_digit(int xx, int yy, int digit, byte r, byte g, byte b) {
   }
 }
 
+// draw single digit on x, y location with 4x7 font
+void draw_single_digit_4x7(int xx, int yy, int digit, byte r, byte g, byte b) {
+  byte digit_row;
+  for (int y=0; y<7; y++) {
+    digit_row = pgm_read_byte(font4x7+y+digit*7);
+    for (int x=0; x<4; x++) {
+      if ((digit_row & 0b1) > 0) {
+        set_pixel(xx + 3 - x + (yy + y) * 8, r, g, b, brightness);
+      }
+      digit_row = digit_row >> 1;
+    }
+  }
+}
+
+/***************************************************************************/
 void display_bitmap(int offset, byte r, byte g, byte b) {
   byte digit_row;
   pixels.clear();
@@ -400,6 +572,7 @@ void display_color_bitmap(int offset) {
   pixels.show();
 }
 
+/***************************************************************************/
 // normal clock with digits from 'font'
 void draw_normal_clock(DateTime dt) {
   draw_single_digit(0, 1, dt.hour() / 10, col_a.r, col_a.g, col_a.b);
@@ -411,6 +584,7 @@ void draw_normal_clock(DateTime dt) {
   }
 }
 
+/***************************************************************************/
 void draw_edit_clock(DateTime dt, int hour_inc, int minute_inc) {
   // make it blink
   if ((pgm_mode_tm_state == PGM_TM_MINUTE) || ((fast_counter >> 6) % 2 == 0)) {
@@ -423,6 +597,7 @@ void draw_edit_clock(DateTime dt, int hour_inc, int minute_inc) {
   }
 }
 
+/***************************************************************************/
 void draw_bcd_column(uint16_t col_nr, byte value, byte r, byte g, byte b) {
   for (byte by=0; by<8; by++) {
     if ((value & 0b1) > 0) {
@@ -445,6 +620,7 @@ void draw_bcd_clock(DateTime dt) {
   draw_bcd_column(7, dt.second() % 10, col_a.r, col_a.g, col_a.b); 
 }
 
+/***************************************************************************/
 // for every hour we have 2 pixels lit
 void draw_analog_clock(DateTime dt) {
   int pixel0_idx = pgm_read_byte(analog_arm_idx+(dt.hour()%12)*2);
@@ -466,6 +642,42 @@ void draw_analog_clock(DateTime dt) {
   }
 }
 
+/***************************************************************************/
+void draw_party(DateTime dt) {
+  byte r;
+  byte g;
+  byte b;
+  int offset1;
+  int offset2;
+  int offset3;
+  for(int i=0; i<8; i++) {
+    for(int j=0; j<8; j++) {
+      offset1 = ((fast_counter*5)>>6) % 60;  //dt.second();
+      offset2 = ((fast_counter*3)>>6) % 60;  //dt.second();
+      offset3 = ((fast_counter*7)>>6) % 60;  //dt.second();
+      r = abs(((offset1 + i*3 + j*1) % 60) - 30);
+      g = abs(((offset2 + i*2 + j*2 + 30) % 60) - 30);
+      b = abs(((offset3 + i*1 + j*3 + 50) % 60) - 30);
+      pixels.setPixelColor(j*8+i, pixels.Color(r, g, b));
+    }
+  }
+}
+/***************************************************************************/
+void draw_hex_clock(DateTime dt) {
+  float word_time_float;
+  unsigned int word_time;
+  word_time_float = (float(approx_millis)/1000 + (dt.hour()*60*60+dt.minute()*60+dt.second())) * 65536 / 86400;
+  word_time = int(word_time_float);
+  draw_single_digit_4x7(0, 0, word_time >> 12, col_a.r, col_a.g, col_a.b);
+  draw_single_digit_4x7(4, 0, (word_time >> 8) & 0xF, col_a.r, col_a.g, col_a.b);
+  for (int x=0; x<8; x++) {
+    if (word_time & (0x1 << (7-x))) {
+      set_pixel(7*8+x, col_b.r, col_b.g, col_b.b, brightness);
+    }
+  }
+}
+
+/***************************************************************************/
 void game() {
   // frogger-like game
   boolean finished = false;
@@ -509,15 +721,11 @@ void game() {
     last_but_a_val = but_a_val;
     last_but_b_val = but_b_val;
     but_a_val = digitalRead(BUT_A_PIN);
-    //but_b_val = digitalRead(BUT_B_PIN);
     // quit
     if ((last_but_a_val == HIGH) && (but_a_val == LOW)) {
       //finished = true;
       player_y --;
     }
-//    if ((last_but_b_val == HIGH) && (but_b_val == LOW)) {
-//      player_y --;
-//    }
     enc_val = rot_enc.read();
     if (enc_val < 0) {
       rot_enc.write(0);
@@ -540,6 +748,9 @@ void game() {
         }
       }
     }
+    if (player_y == 0) {
+      finished = true;
+    }
     // player
     pixels.setPixelColor(player_x + 8*player_y, pixels.Color(0,40,0));
 
@@ -554,31 +765,15 @@ void game() {
   }
 }
 
-//void game() {
-//  // frogger-like game
-//  boolean finished = false;
-//  int c = 0;
-//  rot_enc.write(0);
-//  while (!finished) {
-//    pixels.clear();
-//    last_but_a_val = but_a_val;
-//    last_but_b_val = but_b_val;
-//    but_a_val = digitalRead(BUT_A_PIN);
-//    but_b_val = digitalRead(BUT_B_PIN);
-//    if ((last_but_a_val == HIGH) && (but_a_val == LOW)) {
-//      finished = true;
-//    }
-//    //pixels.setPixelColor(c % 64, pixels.Color(100,100,100));
-//    pixels.show();
-//    c++;
-//    delay(50);
-//  }
-//}
-
 void loop () 
 {
     DateTime now = rtc.now(); //get the current date-time
     uint32_t ts = now.getEpoch();
+    byte pix_trans;
+    if (ts != old_ts) {
+       start_approx_millis_time = millis();
+    }
+    approx_millis = millis() - start_approx_millis_time;
 
     last_but_a_val = but_a_val;
     but_a_val = digitalRead(BUT_A_PIN);
@@ -590,26 +785,65 @@ void loop ()
       brightness--;
     }
 
+      // button down = entering time set mode
+      if (but_a_val == LOW) {
+          but_counter += 1;
+
+//          // straight transition
+//          pixels.setPixelColor((but_counter-50)/3, pixels.Color(0,5,0));
+//          pixels.show();
+
+          for (int i=0; i<64; i++) {
+            pix_trans = pgm_read_byte(fill_pattern+i+FILL_PATTERN_1);
+            if (pix_trans <= (but_counter-50)/3) {
+              pixels.setPixelColor(i, pixels.Color(0,5,0));
+            }
+          }
+          pixels.show();
+
+          if (but_counter > 191+50) {   // approx 2 second press
+            if (clock_mode == MODE_SET_CLOCK) {
+              // cancel clock set
+              clock_mode = last_clock_mode;
+              pgm_mode = PGM_MODE_LO;
+              pgm_mode_tm_state = PGM_TM_NONE;
+              rot_enc.write(0);
+              display_bitmap(BITMAP_NO, 4, 0, 0);
+            } else {
+              // enter set clock
+              last_clock_mode = clock_mode;
+              clock_mode = MODE_SET_CLOCK;
+              pgm_mode = PGM_MODE_TM;
+              pgm_mode_tm_state = PGM_TM_HOUR;
+              rot_enc.write(0);
+              hour_inc = 0;
+              minute_inc = 0;
+              enc_pos = new_enc_pos;
+              display_bitmap(BITMAP_TM, 0, 4, 0);
+            }
+            // wait button up
+            while (but_a_val == LOW) {
+              but_a_val = digitalRead(BUT_A_PIN);
+            }
+            last_but_a_val = but_a_val;
+          }
+      } else {
+            but_counter = 0;
+      }
+
       switch (pgm_mode) {
         case PGM_MODE_TM:
-          if ((last_but_a_val == HIGH) && (but_a_val == LOW)) {
+          if ((last_but_a_val == LOW) && (but_a_val == HIGH)) {  // wait until the button is released
             DateTime dt;
             switch (pgm_mode_tm_state) {
-              case PGM_TM_NONE:
-                last_clock_mode = clock_mode;
-                clock_mode = MODE_SET_CLOCK;
-                pgm_mode_tm_state = PGM_TM_HOUR;
-                rot_enc.write(0);
-                enc_pos = new_enc_pos;
-                break;
               case PGM_TM_HOUR:
                 pgm_mode_tm_state = PGM_TM_MINUTE;
                 // save hour
                 dt = DateTime(now.year(), now.month(), now.date(), max(min(now.hour()+hour_inc, 23), 0), now.minute(), now.second(), now.dayOfWeek());
                 rtc.setDateTime(dt); //Adjust date-time as defined 'dt' above 
-                hour_inc = 0;  // it is set now
                 rot_enc.write(0);
-                enc_pos = new_enc_pos;
+                hour_inc = 0;  // it is set now
+                //enc_pos = new_enc_pos;
                 break;
               case PGM_TM_MINUTE:
                 pgm_mode_tm_state = PGM_TM_NONE;
@@ -617,6 +851,12 @@ void loop ()
                 // save minute
                 dt = DateTime(now.year(), now.month(), now.date(), now.hour(), max(min(now.minute() + minute_inc, 59), 0), now.second(), now.dayOfWeek());
                 rtc.setDateTime(dt); //Adjust date-time as defined 'dt' above 
+
+                pgm_mode = PGM_MODE_LO;
+                display_bitmap(BITMAP_OK, 0, 4, 0);
+                delay(PGM_MODE_SWITCH_DELAY);
+                pgm_mode_tm_state = PGM_TM_NONE;
+
                 break;
             }
           }
@@ -631,22 +871,18 @@ void loop ()
                 // hour
                 minute_inc = new_enc_pos / 4;                 
                 break;
-              case PGM_TM_NONE:
-                pgm_mode = PGM_MODE_LO;
-                display_bitmap(BITMAP_LO, 0, 0, 4);
-                delay(PGM_MODE_SWITCH_DELAY);
-                pgm_mode_tm_state = PGM_TM_NONE;
-                break;
             }
           }
           break;
         case PGM_MODE_LO:
-          // button a readout
-          if ((last_but_a_val == HIGH) && (but_a_val == LOW)) {
-            clock_mode = (clock_mode + 1) % NUM_CLOCK_MODES;
-          }
           // encoder readout
-          if (new_enc_pos != enc_pos) {
+          if (new_enc_pos < 0) {
+            new_enc_pos += NUM_CLOCK_MODES;
+            rot_enc.write(new_enc_pos);
+          }
+          clock_mode = (new_enc_pos / 4) % NUM_CLOCK_MODES;
+          // button a readout
+          if ((last_but_a_val == LOW) && (but_a_val == HIGH)) {
             pgm_mode = PGM_MODE_GM;
             rot_enc.write(0);
             enc_pos = new_enc_pos;
@@ -656,12 +892,12 @@ void loop ()
           }
           break;
         case PGM_MODE_GM:
-          // button a readout
-          if ((last_but_a_val == HIGH) && (but_a_val == LOW)) {
-            game();
-          }
           // encoder readout
           if (new_enc_pos != enc_pos) {
+            game();
+          }
+          // button a readout
+          if ((last_but_a_val == LOW) && (but_a_val == HIGH)) {
             pgm_mode = PGM_MODE_CO;
             rot_enc.write(0);
             enc_pos = new_enc_pos;
@@ -670,14 +906,6 @@ void loop ()
           }
           break;
         case PGM_MODE_CO:
-          // button a readout
-          if ((last_but_a_val == HIGH) && (but_a_val == LOW)) {
-            pgm_mode = PGM_MODE_TM;
-            rot_enc.write(0);
-            enc_pos = new_enc_pos;
-            display_bitmap(BITMAP_TM, 0, 0, 4);
-            delay(PGM_MODE_SWITCH_DELAY);
-          }
           // encoder readout
           if (new_enc_pos < 0) {
             new_enc_pos += NUM_COLORS;
@@ -685,37 +913,26 @@ void loop ()
           }
           color_idx = (new_enc_pos / 4) % NUM_COLORS;
           set_colors(color_idx);
-//          if (new_enc_pos != enc_pos) {
-//          }
+          // button a readout
+          if ((last_but_a_val == LOW) && (but_a_val == HIGH)) {
+            pgm_mode = PGM_MODE_LO;
+            rot_enc.write(clock_mode*4);
+            enc_pos = new_enc_pos;
+            display_bitmap(BITMAP_LO, 0, 0, 4);
+            delay(PGM_MODE_SWITCH_DELAY);
+          }
           break;
       }
     
-    enc_pos = new_enc_pos;
+//    enc_pos = new_enc_pos;
     
+//
+//    if (old_ts == 0 || old_ts != ts) {
+//    	old_ts = ts;
+//    }
 
-    if (old_ts == 0 || old_ts != ts) {
-    	old_ts = ts;
-//    	Serial.print(now.year(), DEC);
-//    	Serial.print('/');
-//    	Serial.print(now.month(), DEC);
-//    	Serial.print('/');
-//    	Serial.print(now.date(), DEC);
-//    	Serial.print(' ');
-//    	Serial.print(now.hour(), DEC);
-//    	Serial.print(':');
-//    	Serial.print(now.minute(), DEC);
-//    	Serial.print(':');
-//    	Serial.print(now.second(), DEC);
-//    	Serial.print(' ');
-//    	Serial.print(weekDay[now.dayOfWeek()]);
-//    	Serial.println();
-//    	Serial.print("Seconds since Unix Epoch: "); 
-//    	Serial.print(ts, DEC);
-//    	Serial.println();
-
-//      pixels.setPixelColor(now.second(), pixels.Color((now.minute() % 2) * 5 , ((now.minute() + 1) % 2) * 5, 0 ));
-//      pixels.setPixelColor(new_enc_pos, pixels.Color(col_b.r,col_b.g,col_b.b));
-    }
+    // only show stuff when no button is pressed down
+    if (but_a_val == HIGH) {
       pixels.clear();
       switch (clock_mode) {
         case MODE_NORMAL:
@@ -724,23 +941,24 @@ void loop ()
         case MODE_BCD:
           draw_bcd_clock(now);
           break;
+        case MODE_ANALOG:
+          draw_analog_clock(now);
+          break;
+        case MODE_PARTY:
+          draw_party(now);
+          break;
+        case MODE_HEX:
+          draw_hex_clock(now);
+          break;
         case MODE_SET_CLOCK:
           // edit clock  
           draw_edit_clock(now, hour_inc, minute_inc);    
           break;
-        case MODE_ANALOG:
-          draw_analog_clock(now);
-          break;
         }
+    }
 
-//      // ldr brightness testing
-//      for (uint16_t i=0; i<8; i++) {
-//        if ((1023 - ldr_value) / 4 / 16 / 2 > i) {
-//          pixels.setPixelColor(i, pixels.Color(0,0,2));
-//        }
-//      }
-      pixels.show();
+    pixels.show();
 
-    //delay(1);
+    old_ts = ts;
     fast_counter++;
 }
