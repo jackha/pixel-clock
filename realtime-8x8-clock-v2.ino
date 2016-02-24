@@ -16,20 +16,20 @@ ds3231 realtime clock + 8x8 ws2812 "display" (aka neopixels) = awesome clock!
 #endif
 #include <Encoder.h>  // rotary encoder
 
-Encoder rot_enc(6, 5);  // rotary encoder: D5, D6
-#define BUT_A_PIN 8  // button next to rotary encoder
-#define BUT_B_PIN 7  // button on rotary encoder
-
 #define LDR_PIN A0
 
-#define NEOPIXEL_PIN 10  // we plug an 8x8 onto it
+Encoder rot_enc(A2, A1);  // rotary encoder: D5, D6
+#define BUT_A_PIN A3  // button next to rotary encoder
+
+#define NEOPIXEL_PIN 9  // we plug an 8x8 onto it
 #define NEOPIXEL_NUM 64
 
 #define MODE_NORMAL 0  // use the 2x5 font
 #define MODE_BCD 1 // binary coded digital 
-#define MODE_SET_CLOCK 2 // go to this mode temporary and then go back to the old mode 
+#define MODE_ANALOG 2  // use pixel arms
+#define MODE_SET_CLOCK 99 // go to this mode temporary and then go back to the old mode 
 
-#define NUM_CLOCK_MODES 2  //
+#define NUM_CLOCK_MODES 3  //
 
 // every time you press button A, the program mode advances
 #define PGM_MODE_TM 0  // time
@@ -183,6 +183,32 @@ static const unsigned char colors[] PROGMEM = {
 
 #define NUM_COLORS 7
 
+// y*8 + x:
+// 0b00yyyxxx
+static const unsigned char analog_arm_idx[] PROGMEM = {
+  0b00000011, 0b00000100,
+  0b00000101, 0b00001110,
+  0b00001110, 0b00010111,
+  0b00011111, 0b00100111,
+  0b00101111, 0b00110110,
+  0b00110110, 0b00111101,
+  0b00111011, 0b00111100,
+  0b00111010, 0b00110001,
+  0b00110001, 0b00101000,
+  0b00100000, 0b00011000,
+  0b00001001, 0b00010000,
+  0b00000010, 0b00001001,
+};
+
+// actually every 2 seconds, we set 30 pixels
+static const unsigned char minute_idx[] PROGMEM = {
+  2+6*8, 3+6*8, 4+6*8, 5+6*8,
+  1+5*8, 2+5*8, 3+5*8, 4+5*8, 5+5*8, 6+5*8,
+  1+4*8, 2+4*8, 3+4*8, 4+4*8, 5+4*8, 6+4*8,
+  1+3*8, 2+3*8,               5+3*8, 6+3*8,
+  1+2*8, 2+2*8, 3+2*8, 4+2*8, 5+2*8, 6+2*8,
+  2+1*8, 3+1*8, 4+1*8, 5+1*8,
+};
 
 long enc_pos  = -999;  // rotary encoder position
 volatile long new_enc_pos = -999;
@@ -195,7 +221,7 @@ char weekDay[][4] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" };
 //year, month, date, hour, min, sec and week-day(starts from 0 and goes to 6)
 //writing any non-existent time-data may interfere with normal operation of the RTC.
 //Take care of week-day also.
-DateTime dt(2016, 2, 10, 15, 18, 0, 5);
+//DateTime dt(2016, 2, 10, 15, 18, 0, 5);
 
 
 // notes in the melody:
@@ -277,7 +303,7 @@ void setup ()
 //    noTone(9);
 //  }
     pinMode(BUT_A_PIN, INPUT_PULLUP);
-    pinMode(BUT_B_PIN, INPUT_PULLUP);
+    //pinMode(BUT_B_PIN, INPUT_PULLUP);
 
     pinMode(LDR_PIN, INPUT_PULLUP);
 
@@ -305,6 +331,10 @@ void setup ()
   // prevent readouts on start
   new_enc_pos = rot_enc.read();
   enc_pos = new_enc_pos;
+
+    but_a_val = digitalRead(BUT_A_PIN);
+    last_but_a_val = but_a_val;
+
 }
 
 uint32_t old_ts;
@@ -377,7 +407,7 @@ void draw_normal_clock(DateTime dt) {
   draw_single_digit(4, 1, dt.minute() / 10, col_a.r, col_a.g, col_a.b);
   draw_single_digit(6, 1, dt.minute() % 10, col_b.r, col_b.g, col_b.b);
   if (dt.second() % 2 == 0) {
-    pixels.setPixelColor(7*8, pixels.Color(col_b.r,col_b.g,col_b.b));
+    set_pixel(7*8, col_b.r,col_b.g,col_b.b, brightness);
   }
 }
 
@@ -413,6 +443,27 @@ void draw_bcd_clock(DateTime dt) {
 
   draw_bcd_column(6, dt.second() / 10, col_a.r, col_a.g, col_a.b);
   draw_bcd_column(7, dt.second() % 10, col_a.r, col_a.g, col_a.b); 
+}
+
+// for every hour we have 2 pixels lit
+void draw_analog_clock(DateTime dt) {
+  int pixel0_idx = pgm_read_byte(analog_arm_idx+(dt.hour()%12)*2);
+  int pixel1_idx = pgm_read_byte(analog_arm_idx+(dt.hour()%12)*2+1);
+  RGB col_hour = col_a;
+  RGB col_minute = col_b;
+  if (dt.hour() >= 12) {
+    col_hour = col_b;
+    col_minute = col_a;
+  }
+    set_pixel(pixel0_idx, col_hour.r, col_hour.g, col_hour.b, brightness);
+    set_pixel(pixel1_idx, col_hour.r, col_hour.g, col_hour.b, brightness);
+    for (int i=0; i<dt.minute() / 2; i++) {
+      set_pixel(pgm_read_byte(minute_idx+i), col_minute.r, col_minute.g, col_minute.b, brightness);
+    }
+  if (dt.second() % 2 == 0) {
+    set_pixel(4*8+3, col_hour.r, col_hour.g, col_hour.b, brightness);
+    set_pixel(4*8+4, col_hour.r, col_hour.g, col_hour.b, brightness);
+  }
 }
 
 void game() {
@@ -458,14 +509,15 @@ void game() {
     last_but_a_val = but_a_val;
     last_but_b_val = but_b_val;
     but_a_val = digitalRead(BUT_A_PIN);
-    but_b_val = digitalRead(BUT_B_PIN);
+    //but_b_val = digitalRead(BUT_B_PIN);
     // quit
     if ((last_but_a_val == HIGH) && (but_a_val == LOW)) {
-      finished = true;
-    }
-    if ((last_but_b_val == HIGH) && (but_b_val == LOW)) {
+      //finished = true;
       player_y --;
     }
+//    if ((last_but_b_val == HIGH) && (but_b_val == LOW)) {
+//      player_y --;
+//    }
     enc_val = rot_enc.read();
     if (enc_val < 0) {
       rot_enc.write(0);
@@ -529,9 +581,7 @@ void loop ()
     uint32_t ts = now.getEpoch();
 
     last_but_a_val = but_a_val;
-    last_but_b_val = but_b_val;
     but_a_val = digitalRead(BUT_A_PIN);
-    but_b_val = digitalRead(BUT_B_PIN);
 
     ldr_value = analogRead(LDR_PIN);
     if (brightness < max(1023 - ldr_value, 10)) {
@@ -542,18 +592,7 @@ void loop ()
 
       switch (pgm_mode) {
         case PGM_MODE_TM:
-          // button a readout
           if ((last_but_a_val == HIGH) && (but_a_val == LOW)) {
-            clock_mode = last_clock_mode;
-            if (pgm_mode_tm_state == PGM_TM_NONE) {
-              pgm_mode = PGM_MODE_LO;
-              display_bitmap(BITMAP_LO, 0, 0, 4);
-              delay(PGM_MODE_SWITCH_DELAY);
-            }
-            pgm_mode_tm_state = PGM_TM_NONE;
-          }
-          // button b
-          if ((last_but_b_val == HIGH) && (but_b_val == LOW)) {
             DateTime dt;
             switch (pgm_mode_tm_state) {
               case PGM_TM_NONE:
@@ -592,12 +631,22 @@ void loop ()
                 // hour
                 minute_inc = new_enc_pos / 4;                 
                 break;
+              case PGM_TM_NONE:
+                pgm_mode = PGM_MODE_LO;
+                display_bitmap(BITMAP_LO, 0, 0, 4);
+                delay(PGM_MODE_SWITCH_DELAY);
+                pgm_mode_tm_state = PGM_TM_NONE;
+                break;
             }
           }
           break;
         case PGM_MODE_LO:
           // button a readout
           if ((last_but_a_val == HIGH) && (but_a_val == LOW)) {
+            clock_mode = (clock_mode + 1) % NUM_CLOCK_MODES;
+          }
+          // encoder readout
+          if (new_enc_pos != enc_pos) {
             pgm_mode = PGM_MODE_GM;
             rot_enc.write(0);
             enc_pos = new_enc_pos;
@@ -605,25 +654,19 @@ void loop ()
             display_bitmap(BITMAP_GM, 0, 0, 4);
             delay(PGM_MODE_SWITCH_DELAY);
           }
-          // encoder readout
-          if (new_enc_pos != enc_pos) {
-            clock_mode = (new_enc_pos / 4) % NUM_CLOCK_MODES;
-          }
           break;
         case PGM_MODE_GM:
           // button a readout
           if ((last_but_a_val == HIGH) && (but_a_val == LOW)) {
+            game();
+          }
+          // encoder readout
+          if (new_enc_pos != enc_pos) {
             pgm_mode = PGM_MODE_CO;
             rot_enc.write(0);
             enc_pos = new_enc_pos;
             display_color_bitmap(BITMAP_CLR_CO);
             delay(PGM_MODE_SWITCH_DELAY);
-          }
-          if ((last_but_b_val == HIGH) && (but_b_val == LOW)) {
-            game();
-          }
-          // encoder readout
-          if (new_enc_pos != enc_pos) {
           }
           break;
         case PGM_MODE_CO:
@@ -634,8 +677,6 @@ void loop ()
             enc_pos = new_enc_pos;
             display_bitmap(BITMAP_TM, 0, 0, 4);
             delay(PGM_MODE_SWITCH_DELAY);
-          }
-          if ((last_but_b_val == HIGH) && (but_b_val == LOW)) {
           }
           // encoder readout
           if (new_enc_pos < 0) {
@@ -686,6 +727,9 @@ void loop ()
         case MODE_SET_CLOCK:
           // edit clock  
           draw_edit_clock(now, hour_inc, minute_inc);    
+          break;
+        case MODE_ANALOG:
+          draw_analog_clock(now);
           break;
         }
 
