@@ -1,6 +1,10 @@
 v2
 --
 
+- Added OpenSCAD files for the case
+
+- Added eagle files version 3p.
+
 - Use eeprom to save and load
 
   - layout mode
