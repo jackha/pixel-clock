@@ -6,7 +6,11 @@ A pixel clock with an 8x8 rgb led display based on Arduino.
 - Atmega 328 microcontroller
 - DS3231 realtime clock module
 - ws2812 8x8 LED display aka NeoPixel.
-- Control using a rotary encoder /w button plus a separate button.
+- Control using a rotary encoder /w button.
+
+The case consist of a front and a back part. It is modeled in OpenSCAD.
+
+The pcb is designed in Eagle.
 
 All is work in progress.
 
