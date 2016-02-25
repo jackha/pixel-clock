@@ -1130,7 +1130,7 @@ void loop ()
         case PGM_MODE_CO:
           // encoder readout
           if (new_enc_pos < 0) {
-            set_colors_cont_b(-new_enc_pos);
+            set_colors_cont_a(-new_enc_pos);
             if (new_enc_pos > neg_enc_pos) {
               // we're rotating back
               rot_enc.write(pos_enc_pos);
@@ -1140,7 +1140,7 @@ void loop ()
             }
           }
           if (new_enc_pos > 0) {
-            set_colors_cont_a(new_enc_pos);
+            set_colors_cont_b(new_enc_pos);
             if (new_enc_pos < pos_enc_pos) {
               rot_enc.write(neg_enc_pos);
               new_enc_pos = neg_enc_pos;
