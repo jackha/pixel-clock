@@ -462,6 +462,7 @@ static const unsigned char bitmaps_co[] PROGMEM = {
 
 static const unsigned char colors[] PROGMEM = {
   40,  0,  0,   25, 15,  0,
+  35,  5,  0,   23, 17,  0,
   30, 10,  0,   20, 20,  0,
    0, 40,  0,   20, 20,  0,
    0, 30, 20,    0, 10, 10,
@@ -470,7 +471,7 @@ static const unsigned char colors[] PROGMEM = {
   20, 20, 20,   10, 10, 30,
 };
 
-#define NUM_COLORS 7
+#define NUM_COLORS 8
 
 // y*8 + x:
 // 0b00yyyxxx
@@ -500,6 +501,9 @@ static const unsigned char minute_idx[] PROGMEM = {
 };
 
 long enc_pos  = -999;  // rotary encoder position
+// for colors
+long neg_enc_pos  = -999;  // rotary encoder position
+long pos_enc_pos  = -999;  // rotary encoder position
 volatile long new_enc_pos = -999;
 uint16_t fast_counter = 0;  // just cycles, for use in timing / moving stuff other than seconds
 
@@ -612,6 +616,18 @@ void set_colors(int color_idx) {
   col_b.b = pgm_read_byte(colors+color_idx*6+5);
 }
 
+void set_colors_cont_a(long int enc) {
+  col_a.r = abs(((enc * 587 + 0) % 16000) - 8000) / 200;
+  col_a.g = abs(((enc * 389 + 128) % 16000) - 8000) / 200; 
+  col_a.b = abs(((enc * 881 + 128) % 16000) - 8000) / 200;
+}
+
+void set_colors_cont_b(long int enc) {
+  col_b.r = abs(((enc * 293 + 0) % 16000) - 8000) / 200;
+  col_b.g = abs(((enc * 331 + 128) % 16000) - 8000) / 200; 
+  col_b.b = abs(((enc * 523 + 128) % 16000) - 8000) / 200;
+}
+
 void set_pixel(int offset, uint32_t r, uint32_t g, uint32_t b, uint32_t brightness) {
   // brightness 0..1023
   // offset is memory location
@@ -627,6 +643,20 @@ void draw_single_digit(int xx, int yy, int digit, byte r, byte g, byte b) {
       if ((digit_row & 0b1) > 0) {
 //        pixels.setPixelColor(xx + 1 - x + (yy + y) * 8, pixels.Color(r, g, b));
         set_pixel(xx + 1 - x + (yy + y) * 8, r, g, b, brightness);
+      }
+      digit_row = digit_row >> 1;
+    }
+  }
+}
+
+void draw_single_digit_(int xx, int yy, int digit, byte r, byte g, byte b) {
+  byte digit_row;
+  for (int y=0; y<5; y++) {
+    digit_row = pgm_read_byte(font+y+digit*5);
+    for (int x=0; x<2; x++) {
+      if ((digit_row & 0b1) > 0) {
+        pixels.setPixelColor(xx + 1 - x + (yy + y) * 8, pixels.Color(r, g, b));
+        //set_pixel(xx + 1 - x + (yy + y) * 8, r, g, b, brightness);
       }
       digit_row = digit_row >> 1;
     }
@@ -796,14 +826,22 @@ void draw_party(DateTime dt) {
       pixels.setPixelColor(j*8+i, pixels.Color(r, g, b));
     }
   }
+      r = 30 - abs(((offset1 + 2*3 + 3*1) % 60) - 30);
+      g = 30 - abs(((offset2 + 2*2 + 3*2 + 30) % 60) - 30);
+      b = 30 - abs(((offset3 + 2*1 + 3*3 + 50) % 60) - 30);
+  draw_single_digit_(2, 1, dt.hour() / 10, r, g, b);
+      r = 30 - abs(((offset1 + 5*3 + 3*1) % 60) - 30);
+      g = 30 - abs(((offset2 + 5*2 + 3*2 + 30) % 60) - 30);
+      b = 30 - abs(((offset3 + 5*1 + 3*3 + 50) % 60) - 30);
+  draw_single_digit_(4, 1, dt.hour() % 10, r, g, b);
 }
 /***************************************************************************/
 void draw_hex_clock(DateTime dt) {
-//  float word_time_float;
+  float word_time_float;
   unsigned int word_time;
-//  word_time_float = (float(approx_millis)/1000 + (dt.hour()*60*60+dt.minute()*60+dt.second())) * 65536 / 86400;
-//  word_time = int(word_time_float);
-  word_time = (dt.hour()*60*60+dt.minute()*60+dt.second()) * 65536 / 86400;
+  word_time_float = (float(approx_millis)/1000 + (dt.hour()*60*60+dt.minute()*60+dt.second())) * 65536 / 86400;
+  word_time = int(word_time_float);
+//  word_time = (dt.hour()*60*60+dt.minute()*60+dt.second()) * 65536 / 86400;
   draw_single_digit_3x5(1, 1, word_time >> 12, col_a.r, col_a.g, col_a.b);
   draw_single_digit_3x5(4, 1, (word_time >> 8) & 0xF, col_b.r, col_b.g, col_b.b);
   for (int x=0; x<8; x++) {
@@ -1053,6 +1091,8 @@ void loop ()
             pgm_mode = PGM_MODE_CO;
             rot_enc.write(0);
             enc_pos = new_enc_pos;
+            pos_enc_pos = 0;
+            neg_enc_pos = 0;
             display_color_bitmap(BITMAP_CLR_CO);
             delay(PGM_MODE_SWITCH_DELAY);
           }
@@ -1060,11 +1100,24 @@ void loop ()
         case PGM_MODE_CO:
           // encoder readout
           if (new_enc_pos < 0) {
-            new_enc_pos += NUM_COLORS;
-            rot_enc.write(new_enc_pos);
+            set_colors_cont_a(-new_enc_pos);
+            if (new_enc_pos > neg_enc_pos) {
+              // we're rotating back
+              rot_enc.write(pos_enc_pos);
+              new_enc_pos = pos_enc_pos;
+            } else {
+              neg_enc_pos = new_enc_pos;
+            }
           }
-          color_idx = (new_enc_pos / 4) % NUM_COLORS;
-          set_colors(color_idx);
+          if (new_enc_pos > 0) {
+            set_colors_cont_b(new_enc_pos);
+            if (new_enc_pos < pos_enc_pos) {
+              rot_enc.write(neg_enc_pos);
+              new_enc_pos = neg_enc_pos;
+            } else {
+              pos_enc_pos = new_enc_pos;
+            }
+          }
           // button a readout
           if ((last_but_a_val == LOW) && (but_a_val == HIGH)) {
             pgm_mode = PGM_MODE_LO;
