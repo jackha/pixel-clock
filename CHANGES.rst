@@ -1,6 +1,14 @@
 v2
 --
 
+- Use eeprom to save and load
+
+  - layout mode
+
+  - used colors
+
+- Better colors
+
 - A lot of user friendlyness.
 
 - hex clock

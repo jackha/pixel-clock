@@ -5,6 +5,7 @@ ds3231 realtime clock + 8x8 ws2812 "display" (aka neopixels) = awesome clock!
 
 */
 
+#include <EEPROM.h>
 // Date and time functions using RX8025 RTC connected via I2C and Wire lib
 
 #include <Wire.h>
@@ -592,19 +593,47 @@ void setup ()
     rtc.begin();
     pixels.begin();
 
-  // set some variables
-  color_idx = 0;
-  set_colors(color_idx);
+    but_a_val = digitalRead(BUT_A_PIN);
+    last_but_a_val = but_a_val;
 
+    read_eeprom();
+      rot_enc.write(4*clock_mode);
   // prevent readouts on start
   new_enc_pos = rot_enc.read();
   enc_pos = new_enc_pos;
 
-    but_a_val = digitalRead(BUT_A_PIN);
-    last_but_a_val = but_a_val;
 }
 
 uint32_t old_ts;
+
+void write_eeprom() {
+  EEPROM.write(0, col_a.r);
+  EEPROM.write(1, col_a.g);
+  EEPROM.write(2, col_a.b);
+
+  EEPROM.write(3, col_b.r);
+  EEPROM.write(4, col_b.g);
+  EEPROM.write(5, col_b.b);
+
+  EEPROM.write(6, clock_mode);
+}
+
+void read_eeprom() {
+  col_a.r = EEPROM.read(0);
+  col_a.g = EEPROM.read(1);
+  col_a.b = EEPROM.read(2);
+
+  col_b.r = EEPROM.read(3);
+  col_b.g = EEPROM.read(4);
+  col_b.b = EEPROM.read(5);
+
+  clock_mode = EEPROM.read(6);  
+  if (clock_mode > NUM_CLOCK_MODES) {
+    // problably empty eeprom
+    set_colors(0);
+    clock_mode = MODE_NORMAL;
+  }
+}
 
 void set_colors(int color_idx) {
   col_a.r = pgm_read_byte(colors+color_idx*6);
@@ -1063,12 +1092,13 @@ void loop ()
         case PGM_MODE_LO:
           // encoder readout
           if (new_enc_pos < 0) {
-            new_enc_pos += NUM_CLOCK_MODES;
+            new_enc_pos += 4*NUM_CLOCK_MODES;
             rot_enc.write(new_enc_pos);
           }
           clock_mode = (new_enc_pos / 4) % NUM_CLOCK_MODES;
           // button a readout
           if ((last_but_a_val == LOW) && (but_a_val == HIGH)) {
+            write_eeprom();
             pgm_mode = PGM_MODE_GM;
             rot_enc.write(0);
             enc_pos = new_enc_pos;
@@ -1120,6 +1150,7 @@ void loop ()
           }
           // button a readout
           if ((last_but_a_val == LOW) && (but_a_val == HIGH)) {
+            write_eeprom();
             pgm_mode = PGM_MODE_LO;
             rot_enc.write(clock_mode*4);
             enc_pos = new_enc_pos;
