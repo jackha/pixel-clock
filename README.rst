@@ -1,7 +1,7 @@
 Pixel Clock
 -----------
 
-image:: images/IMG_3512.JPG
+.. image:: images/IMG_3512.JPG
 
 A pixel clock with an 8x8 rgb led display based on Arduino.
 
