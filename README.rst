@@ -12,7 +12,11 @@ The case consist of a front and a back part. It is modeled in OpenSCAD.
 
 The pcb is designed in Eagle.
 
-All is work in progress.
+All is work in progress. You can follow the project:
+
+http://jh-interact.blogspot.nl/
+
+http://www.thingiverse.com/thing:1372109
 
 License
 -------
