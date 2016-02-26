@@ -14,4 +14,11 @@ The pcb is designed in Eagle.
 
 All is work in progress.
 
-Open source hardware and software :-)
+License
+-------
+
+Open source hardware and software :-) Please follow my License as I put time
+and effort in this project. Thanks!
+
+https://creativecommons.org/licenses/by-nc/3.0/
+Attribution-NonCommercial 3.0 Unported (CC BY-NC 3.0)
