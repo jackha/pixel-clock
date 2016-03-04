@@ -40,8 +40,9 @@ Encoder rot_enc(A2, A1);  // rotary encoder: D5, D6
 #define MODE_PARTY 10  // no clock - just colors!
 #define MODE_HEX 11  // jack's hex clock: a day is 0x0000..0xFFFF, where the highest byte is displayed as hex and lowest as bits
 #define MODE_GAME_OF_LIFE 12  // conways game of life
+#define MODE_4X4 13  // conways game of life
 
-#define NUM_CLOCK_MODES 13  //
+#define NUM_CLOCK_MODES 14  //
 
 // every time you press button A, the program mode advances
 #define PGM_MODE_TM 0  // time
@@ -69,6 +70,10 @@ struct RGB {
    byte   r;
    byte   g;
    byte   b;
+
+   byte h;  // hue, for memory purposes only
+   byte s;  // saturation
+   byte l;  // luminosity
 };
 
 struct RGB col_a; 
@@ -270,11 +275,11 @@ static const unsigned char font4x7[] PROGMEM = {
 
 // hex font
 static const unsigned char font3x5[] PROGMEM = {
-  0b010,
+  0b111,
   0b101,
   0b101,
   0b101,
-  0b010,
+  0b111,
 
   0b010,
   0b010,
@@ -306,7 +311,7 @@ static const unsigned char font3x5[] PROGMEM = {
   0b001,
   0b110,
 
-  0b010,
+  0b011,
   0b100,
   0b111,
   0b101,
@@ -328,7 +333,7 @@ static const unsigned char font3x5[] PROGMEM = {
   0b101,
   0b111,
   0b001,
-  0b010,
+  0b110,
 
   0b010,
   0b101,
@@ -367,11 +372,66 @@ static const unsigned char font3x5[] PROGMEM = {
   0b100,
 };
 
+// numeric font
+static const unsigned char font4x4[] PROGMEM = {
+  0b1111,
+  0b1011,
+  0b1101,
+  0b1111,
+
+  0b1110,
+  0b0110,
+  0b0110,
+  0b1111,
+
+  0b1111,
+  0b0011,
+  0b1100,
+  0b1111,
+
+  0b1111,
+  0b0111,
+  0b0011,
+  0b1111,
+
+  0b1011,
+  0b1011,
+  0b1111,
+  0b0011,
+
+  0b1111,
+  0b1100,
+  0b0011,
+  0b1111,
+
+  0b1000,
+  0b1111,
+  0b1001,
+  0b1111,
+
+  0b1111,
+  0b0011,
+  0b0011,
+  0b0011,
+
+  0b0111,
+  0b0101,
+  0b1111,
+  0b1111,
+
+  0b1111,
+  0b1001,
+  0b1111,
+  0b0001,
+};
+
 #define BITMAP_TM 0
 #define BITMAP_LO 8
 #define BITMAP_GM 16
 #define BITMAP_OK 24
 #define BITMAP_NO 32
+#define BITMAP_PACMAN0 40
+#define BITMAP_PACMAN1 48
 
 static const unsigned char bitmaps[] PROGMEM = {
   // 'set' aka 'time'
@@ -431,6 +491,27 @@ static const unsigned char bitmaps[] PROGMEM = {
   0b10010010,
   0b00000000,
   0b00000000,
+
+  // pac man frame 0
+  0b00111100,
+  0b01111110,
+  0b11111111,
+  0b11111111,
+  0b11111111,
+  0b11111111,
+  0b01111110,
+  0b00111100,
+
+  // pac man frame 1
+  0b00111100,
+  0b01111110,
+  0b00011111,
+  0b00001111,
+  0b00001111,
+  0b00011111,
+  0b01111110,
+  0b00111100,
+
 };
 
 
@@ -492,14 +573,25 @@ static const unsigned char analog_arm_idx[] PROGMEM = {
   0b00000010, 0b00001001,
 };
 
-// actually every 2 seconds, we set 30 pixels
+// pixel indices for every minute.
 static const unsigned char minute_idx[] PROGMEM = {
-  2+6*8, 3+6*8, 4+6*8, 5+6*8,
-  1+5*8, 2+5*8, 3+5*8, 4+5*8, 5+5*8, 6+5*8,
-  1+4*8, 2+4*8, 3+4*8, 4+4*8, 5+4*8, 6+4*8,
-  1+3*8, 2+3*8,               5+3*8, 6+3*8,
-  1+2*8, 2+2*8, 3+2*8, 4+2*8, 5+2*8, 6+2*8,
-  2+1*8, 3+1*8, 4+1*8, 5+1*8,
+  3, 5, 7, 9, 11,
+  13, 15, 17, 19, 21,
+  23, 25, 27, 30,
+
+  33, 35, 37, 39, 41,
+  43, 45, 47, 49, 51,
+  53, 55, 57, 60,
+};
+
+static const unsigned char minute_pix_idx[] PROGMEM = {
+  4+0*8, 5+0*8, 6+0*8, 7+0*8, 7+1*8,  
+  7+2*8, 7+3*8, 7+4*8, 7+5*8, 7+6*8, 
+  7+7*8, 6+7*8, 5+7*8, 4+7*8,  
+  
+  3+7*8, 2+7*8, 1+7*8, 0+7*8, 0+6*8, 
+  0+5*8, 0+4*8, 0+3*8, 0+2*8, 0+1*8, 
+  0+0*8, 1+0*8, 2+0*8, 3+0*8, 3+0*8, 
 };
 
 long enc_pos  = -999;  // rotary encoder position
@@ -593,6 +685,7 @@ void setup ()
     pinMode(LDR_PIN, INPUT_PULLUP);
 
     Serial.begin(57600);
+    
     Wire.begin();
     rtc.begin();
     pixels.begin();
@@ -606,7 +699,32 @@ void setup ()
   new_enc_pos = rot_enc.read();
   enc_pos = new_enc_pos;
 
-  init_game_of_life();
+  init_game_of_life();  
+
+
+// testing hsl_to_rgb function
+//  long unsigned int col;
+//    col = hsl_to_rgb(0.536, 0.67, 0.28);
+//    Serial.println(int(col >> 16));
+//    Serial.println(int((col >> 8) & 0xff));
+//    Serial.println(int(col & 0xff));
+//
+//  for (int j=0; j<1000; j++) {
+//    col = hsl_to_rgb(float(j) / 1000, 1, 0.1);
+//    pixels.clear();
+//    for (int i=0; i<(col >> 16) >> 5; i++) {
+//      pixels.setPixelColor(i, pixels.Color(col >> 16, (col >> 8) & 0xff, col & 0xff)); 
+//    }
+//    for (int i=0; i<(((col >> 8) & 0xff) >> 5); i++) {
+//      pixels.setPixelColor(i+8, pixels.Color(col >> 16, (col >> 8) & 0xff, col & 0xff)); 
+//    }
+//    for (int i=0; i<((col & 0xff) >> 5); i++) {
+//      pixels.setPixelColor(i+16, pixels.Color(col >> 16, (col >> 8) & 0xff, col & 0xff)); 
+//    }
+//    pixels.show();
+//  delay(10);
+//  }
+
 }
 
 uint32_t old_ts;
@@ -621,6 +739,15 @@ void write_eeprom() {
   EEPROM.write(5, col_b.b);
 
   EEPROM.write(6, clock_mode);
+
+  EEPROM.write(7, col_a.h);
+  EEPROM.write(8, col_a.s);
+  EEPROM.write(9, col_a.l);
+
+  EEPROM.write(10, col_b.h);
+  EEPROM.write(11, col_b.s);
+  EEPROM.write(12, col_b.l);
+
 }
 
 void read_eeprom() {
@@ -633,11 +760,23 @@ void read_eeprom() {
   col_b.b = EEPROM.read(5);
 
   clock_mode = EEPROM.read(6);  
+
+  col_a.h = EEPROM.read(7);
+  col_a.s = EEPROM.read(8);
+  col_a.l = EEPROM.read(9);
+
+  col_b.h = EEPROM.read(10);
+  col_b.s = EEPROM.read(11);
+  col_b.l = EEPROM.read(12);
+
   if (clock_mode > NUM_CLOCK_MODES) {
     // problably empty eeprom
     set_colors(0);
     clock_mode = MODE_NORMAL;
   }
+
+  col_a.l = 26;
+  col_b.l = 26;
 }
 
 void set_colors(int color_idx) {
@@ -648,18 +787,32 @@ void set_colors(int color_idx) {
   col_b.r = pgm_read_byte(colors+color_idx*6+3);
   col_b.g = pgm_read_byte(colors+color_idx*6+4);
   col_b.b = pgm_read_byte(colors+color_idx*6+5);
+
+  col_a.h = 0;
+  col_a.s = 255;
+  col_a.l = 26;
+
+  col_b.h = 0;
+  col_b.s = 255;
+  col_b.l = 26;
 }
 
-void set_colors_cont_a(long int enc) {
-  col_a.r = abs(((enc * 587 + 0) % 16000) - 8000) / 200;
-  col_a.g = abs(((enc * 389 + 128) % 16000) - 8000) / 200; 
-  col_a.b = abs(((enc * 881 + 128) % 16000) - 8000) / 200;
+void set_colors_cont_a2(long int enc) {
+  col_a.h = enc % 256;
+  col_a.s = 255 - 64 * ((enc / 256) % 4);
+  long unsigned int col = hsl_to_rgb(float(col_a.h) / 255, float(col_a.s)/255, float(col_a.l)/255);
+  col_a.r = col >> 16;
+  col_a.g = (col >> 8) & 0xff;
+  col_a.b = col & 0xff;
 }
-
-void set_colors_cont_b(long int enc) {
-  col_b.r = abs(((enc * 293 + 0) % 16000) - 8000) / 200;
-  col_b.g = abs(((enc * 331 + 128) % 16000) - 8000) / 200; 
-  col_b.b = abs(((enc * 523 + 128) % 16000) - 8000) / 200;
+void set_colors_cont_b2(long int enc) {
+  col_b.h = enc % 256;
+  col_b.s = 255 - 64 * ((enc / 256) % 4);
+  long unsigned int col = hsl_to_rgb(float(col_b.h) / 255, float(col_b.s)/255, float(col_b.l)/255);
+  col_b.r = col >> 16;
+  col_b.g = (col >> 8) & 0xff;
+  col_b.b = col & 0xff;
+  col_b.h = enc % 256;
 }
 
 void set_pixel(int offset, uint32_t r, uint32_t g, uint32_t b, uint32_t brightness) {
@@ -711,7 +864,7 @@ void draw_single_digit_4x7(int xx, int yy, int digit, byte r, byte g, byte b) {
   }
 }
 
-// draw single digit on x, y location with 4x7 font
+// draw single digit on x, y location with 3x5 font
 void draw_single_digit_3x5(int xx, int yy, int digit, byte r, byte g, byte b) {
   byte digit_row;
   for (int y=0; y<5; y++) {
@@ -719,6 +872,39 @@ void draw_single_digit_3x5(int xx, int yy, int digit, byte r, byte g, byte b) {
     for (int x=0; x<3; x++) {
       if ((digit_row & 0b1) > 0) {
         set_pixel(xx + 2 - x + (yy + y) * 8, r, g, b, brightness);
+      }
+      digit_row = digit_row >> 1;
+    }
+  }
+}
+
+// draw single digit on x, y location with 3x5 font
+// doubling the 4th row to make it 3x6 ^^
+void draw_single_digit_3x6(int xx, int yy, int digit, byte r, byte g, byte b) {
+  byte digit_row;
+  for (int y=0; y<6; y++) {
+    if (y < 2) {
+      digit_row = pgm_read_byte(font3x5+y+digit*5);
+    } else {
+      digit_row = pgm_read_byte(font3x5+y-1+digit*5);    
+    }
+    for (int x=0; x<3; x++) {
+      if ((digit_row & 0b1) > 0) {
+        set_pixel(xx + 2 - x + (yy + y) * 8, r, g, b, brightness);
+      }
+      digit_row = digit_row >> 1;
+    }
+  }
+}
+
+// draw single digit on x, y location with 4x4 font
+void draw_single_digit_4x4(int xx, int yy, int digit, byte r, byte g, byte b) {
+  byte digit_row;
+  for (int y=0; y<4; y++) {
+    digit_row = pgm_read_byte(font4x4+y+digit*4);
+    for (int x=0; x<4; x++) {
+      if ((digit_row & 0b1) > 0) {
+        set_pixel(xx + 3 - x + (yy + y) * 8, r, g, b, brightness);
       }
       digit_row = digit_row >> 1;
     }
@@ -733,22 +919,90 @@ void wait_button_up() {
     last_but_a_val = but_a_val;
 }
 
+// helper function to use on r, g and b
+float temp_to_col(float temp_1, float temp_2, float temp_col)
+{
+  float result;
+  if (6 * temp_col < 1) {
+    result = (temp_2 + (temp_1 - temp_2) * 6 * temp_col);
+  } else if (2 * temp_col < 1) {
+    result = temp_1;
+  } else if (3 * temp_col < 2) {
+    result = temp_2 + (temp_1 - temp_2) * (0.666666 - temp_col) * 6;
+  } else {
+    result = temp_2;
+  }
+  return result;    
+
+}
+
+// convert hue / saturation / luminance to rgb. h/s/l is 0..1
+// from: http://www.niwa.nu/2013/05/math-behind-colorspace-conversions-rgb-hsl/
+// rgb is coded as bytes in the return value 
+// r = (result >> 16), g = (result >> 8) & 0xff, b = result & 0xff
+unsigned long hsl_to_rgb(float h, float s, float l) {
+  float temp_1, temp_2, temp_r, temp_g, temp_b;
+  float r, g, b;
+  // 2
+  if (l < 0.5) {
+    temp_1 = l * (1.0 + s);
+  } else {
+    temp_1 = l + s - l * s;
+  }
+  Serial.println(temp_1);
+  // 3
+  temp_2 = 2 * l - temp_1;
+  Serial.println(temp_2);
+  // 5
+  temp_r = h + 0.333333;
+  if (temp_r > 1) {
+    temp_r -= 1;
+  }
+  temp_g = h;  
+  temp_b = h - 0.333333;
+  if (temp_b < 0) {
+    temp_b += 1;
+  }
+  Serial.println(temp_r);
+  Serial.println(temp_g);
+  Serial.println(temp_b);
+
+  // 6
+  r = temp_to_col(temp_1, temp_2, temp_r);
+  g = temp_to_col(temp_1, temp_2, temp_g);
+  b = temp_to_col(temp_1, temp_2, temp_b);
+
+  Serial.println(r);
+  Serial.println(g);
+  Serial.println(b);
+
+  return long(255*r) * 256 * 256 + long(255*g) * 256 + long(255*b);
+}
+
 /***************************************************************************/
-void display_bitmap(int offset, byte r, byte g, byte b) {
+void display_bitmap_(int location_offset_x, int location_offset_y, int bitmap_offset, byte r, byte g, byte b) {
   byte digit_row;
-  pixels.clear();
+  byte xx, yy;
   for (int y=0; y<8; y++) {
-    digit_row = pgm_read_byte(bitmaps+offset+y);
+    digit_row = pgm_read_byte(bitmaps+bitmap_offset+y);
     for (int x=0; x<8; x++) {
       if ((digit_row & 0b1) > 0) {
-        pixels.setPixelColor(7 - x + y * 8, pixels.Color(r, g, b));
+        xx = 7 - x + location_offset_x;
+        yy = y + location_offset_y;
+        if ((xx >= 0) && (xx < 8) && (yy >= 0) && (yy < 8)) {
+          pixels.setPixelColor(xx + yy * 8, pixels.Color(r, g, b));
+        }
       }
       digit_row = digit_row >> 1;
     }
   }
-  pixels.show();
 }
 
+void display_bitmap(int bitmap_offset, byte r, byte g, byte b) {
+  pixels.clear();
+  display_bitmap_(0, 0, bitmap_offset, r, g, b);
+  pixels.show();
+}
 
 void display_color_bitmap(int offset) {
   byte r, g, b;
@@ -820,24 +1074,20 @@ void draw_bcd_clock(DateTime dt) {
 }
 
 /***************************************************************************/
-// for every hour we have 2 pixels lit
 void draw_analog_clock(DateTime dt) {
-  int pixel0_idx = pgm_read_byte(analog_arm_idx+(dt.hour()%12)*2);
-  int pixel1_idx = pgm_read_byte(analog_arm_idx+(dt.hour()%12)*2+1);
-  RGB col_hour = col_a;
-  RGB col_minute = col_b;
-  if (dt.hour() >= 12) {
-    col_hour = col_b;
-    col_minute = col_a;
-  }
-    set_pixel(pixel0_idx, col_hour.r, col_hour.g, col_hour.b, brightness);
-    set_pixel(pixel1_idx, col_hour.r, col_hour.g, col_hour.b, brightness);
-    for (int i=0; i<dt.minute() / 2; i++) {
-      set_pixel(pgm_read_byte(minute_idx+i), col_minute.r, col_minute.g, col_minute.b, brightness);
+  byte pix_idx, minut;
+  draw_single_digit_3x6(1, 1, dt.hour() / 10, col_a.r, col_a.g, col_a.b);
+  draw_single_digit_3x6(4, 1, dt.hour() % 10, col_b.r, col_b.g, col_b.b);
+
+  minut = 0;
+  for (int i=0; minut < dt.minute() + dt.second() % 2; i++) {
+    minut = pgm_read_byte(minute_idx+i);
+    pix_idx = pgm_read_byte(minute_pix_idx+i);
+    if (pix_idx % 8 >= 4) {
+      set_pixel(pix_idx, col_a.r, col_a.g, col_a.b, brightness);
+    } else {
+      set_pixel(pix_idx, col_b.r, col_b.g, col_b.b, brightness);      
     }
-  if (dt.second() % 2 == 0) {
-    set_pixel(4*8+3, col_hour.r, col_hour.g, col_hour.b, brightness);
-    set_pixel(4*8+4, col_hour.r, col_hour.g, col_hour.b, brightness);
   }
 }
 
@@ -991,6 +1241,63 @@ void step_game_of_life() {
   }
 }
 
+// Standard Gerard Vichniac voting rule, also known as "Majority".
+void step_game_of_life_majority() {
+  byte num_neighbors;
+//  byte r, g, b;
+  // clear buffer 1
+  for (int i=0; i<3*64; i++) {
+    game_of_life[1][i] = 0;
+  }
+  // calc buffer 1
+  for (int y=0; y<8; y++) {
+    for (int x=0; x<8; x++) {
+      num_neighbors = gol_neighbors(0, x, y);
+      if (gol_alive(0, x, y)) {
+        if (num_neighbors >= 4) {
+          set_gol(1, x, y, col_a.r / 2, col_a.g / 2, col_a.b / 2);
+        }
+      } else {
+        if (num_neighbors >= 5) {
+          set_gol(1, x, y, col_b.r / 2, col_b.g / 2, col_b.b / 2);
+        }
+      }
+    }
+  }
+  // copy buffer 1 -> 0
+  for (int i=0; i<3*64; i++) {
+    game_of_life[0][i] = game_of_life[1][i];
+  }
+}
+
+void step_game_of_life_test() {
+  byte num_neighbors;
+//  byte r, g, b;
+  // clear buffer 1
+  for (int i=0; i<3*64; i++) {
+    game_of_life[1][i] = 0;
+  }
+  // calc buffer 1
+  for (int y=0; y<8; y++) {
+    for (int x=0; x<8; x++) {
+      num_neighbors = gol_neighbors(0, x, y);
+      if (gol_alive(0, x, y)) {
+        if (num_neighbors == 1) {
+          //set_gol(1, x, y, col_a.r / 2, col_a.g / 2, col_a.b / 2);
+        }
+      } else {
+        if (num_neighbors == 1) {
+          set_gol(1, x, y, col_b.r / 2, col_b.g / 2, col_b.b / 2);
+        }
+      }
+    }
+  }
+  // copy buffer 1 -> 0
+  for (int i=0; i<3*64; i++) {
+    game_of_life[0][i] = game_of_life[1][i];
+  }
+}
+
 void draw_game_of_life(DateTime dt) {
   for (int i=0; i<64; i++) {
     set_pixel(i, game_of_life[0][i*3], game_of_life[0][i*3+1], game_of_life[0][i*3+2], brightness);  
@@ -1108,6 +1415,19 @@ void game() {
     delay(1000);
   }
 }
+
+/***************************************************************************/
+// normal clock with digits from 'font'
+void draw_clock_4x4(DateTime dt, RGB col_a, RGB col_b) {
+  draw_single_digit_4x4(0, 0, dt.hour() / 10, col_a.r, col_a.g, col_a.b);
+  draw_single_digit_4x4(4, 0, dt.hour() % 10, col_b.r, col_b.g, col_b.b);
+  draw_single_digit_4x4(0, 4, dt.minute() / 10, col_b.r, col_b.g, col_b.b);
+  draw_single_digit_4x4(4, 4, dt.minute() % 10, col_a.r, col_a.g, col_a.b);
+//  if (dt.second() % 2 == 0) {
+//    set_pixel(7*8, col_a.r,col_a.g,col_a.b, brightness);
+//  }
+}
+
 
 void loop () 
 {
@@ -1240,38 +1560,46 @@ void loop ()
           // button a readout
           if ((last_but_a_val == LOW) && (but_a_val == HIGH)) {
             write_eeprom();
-            pgm_mode = PGM_MODE_GM;
-            rot_enc.write(0);
-            enc_pos = new_enc_pos;
-            last_clock_mode = clock_mode;
-            display_bitmap(BITMAP_GM, 0, 0, 4);
-            delay(PGM_MODE_SWITCH_DELAY);
-          }
-          break;
-        case PGM_MODE_GM:
-          // encoder readout
-          if (new_enc_pos != enc_pos) {
-            game();
-            wait_button_up();
-            rot_enc.write(0);
-            enc_pos = 0;
-            new_enc_pos = 0;
-          }
-          // button a readout
-          if ((last_but_a_val == LOW) && (but_a_val == HIGH)) {
+            // go to color mode
             pgm_mode = PGM_MODE_CO;
-            rot_enc.write(0);
+            rot_enc.write(col_b.h + 256 * (255-col_b.s) / 64);  // calculate the encoder position back from current colors
             enc_pos = new_enc_pos;
-            pos_enc_pos = 0;
-            neg_enc_pos = 0;
+            pos_enc_pos = col_b.h + 256 * (255-col_b.s) / 64;
+            neg_enc_pos = -col_a.h - 256 * (255-col_a.s) / 64;
             display_color_bitmap(BITMAP_CLR_CO);
             delay(PGM_MODE_SWITCH_DELAY);
+//            pgm_mode = PGM_MODE_GM;
+//            rot_enc.write(0);
+//            enc_pos = new_enc_pos;
+//            last_clock_mode = clock_mode;
+//            display_bitmap(BITMAP_GM, 0, 0, 4);
+//            delay(PGM_MODE_SWITCH_DELAY);
           }
           break;
+//        case PGM_MODE_GM:
+//          // encoder readout
+//          if (new_enc_pos != enc_pos) {
+//            game();
+//            wait_button_up();
+//            rot_enc.write(0);
+//            enc_pos = 0;
+//            new_enc_pos = 0;
+//          }
+//          // button a readout
+//          if ((last_but_a_val == LOW) && (but_a_val == HIGH)) {
+//            pgm_mode = PGM_MODE_CO;
+//            rot_enc.write(0);
+//            enc_pos = new_enc_pos;
+//            pos_enc_pos = 0;
+//            neg_enc_pos = 0;
+//            display_color_bitmap(BITMAP_CLR_CO);
+//            delay(PGM_MODE_SWITCH_DELAY);
+//          }
+//          break;
         case PGM_MODE_CO:
           // encoder readout
           if (new_enc_pos < 0) {
-            set_colors_cont_a(-new_enc_pos);
+            set_colors_cont_a2(-new_enc_pos);
             if (new_enc_pos > neg_enc_pos) {
               // we're rotating back
               rot_enc.write(pos_enc_pos);
@@ -1281,7 +1609,7 @@ void loop ()
             }
           }
           if (new_enc_pos > 0) {
-            set_colors_cont_b(new_enc_pos);
+            set_colors_cont_b2(new_enc_pos);
             if (new_enc_pos < pos_enc_pos) {
               rot_enc.write(neg_enc_pos);
               new_enc_pos = neg_enc_pos;
@@ -1349,12 +1677,24 @@ void loop ()
           draw_hex_clock(now);
           break;
         case MODE_GAME_OF_LIFE:
-          if (old_ts != ts) {
+          if (old_ts / 2 != ts / 2) {
+            step_game_of_life();
+            //step_game_of_life_test();
+            //step_game_of_life_majority();
+          }
+          if (old_ts / 10 != ts / 10) {
+            // for majority rule
+//            for (int i=0; i<3*64; i++) {
+//              game_of_life[0][i] = 0;
+//            }
+
             draw_normal_clock_gol(now, col_a, col_b, 1, 1, 1, 1, 7*8);
           }
           draw_game_of_life(now);
-          step_game_of_life();
-          delay(100);
+          // draw_normal_clock(now, col_a, col_b, 1, 1, 1, 1, 8*8);
+          break;
+        case MODE_4X4:
+          draw_clock_4x4(now, col_a, col_b);
           break;
         case MODE_SET_CLOCK:
           // edit clock  
@@ -1363,6 +1703,14 @@ void loop ()
         }
     }
 
+    // hour transition
+    if ((now.minute() == 59) && (now.second() == 59)) {
+      if ((approx_millis / 75) % 2 == 0) {
+        display_bitmap_(8-(approx_millis * 24 / 1000), 0, BITMAP_PACMAN0, 10, 10, 0);
+      } else {
+        display_bitmap_(8-(approx_millis * 24 / 1000), 0, BITMAP_PACMAN1, 10, 10, 0);
+      }
+    }
     pixels.show();
 
     old_ts = ts;
