@@ -432,6 +432,8 @@ static const unsigned char font4x4[] PROGMEM = {
 #define BITMAP_NO 32
 #define BITMAP_PACMAN0 40
 #define BITMAP_PACMAN1 48
+#define BITMAP_GHOST0 56
+#define BITMAP_GHOST1 64
 
 static const unsigned char bitmaps[] PROGMEM = {
   // 'set' aka 'time'
@@ -512,8 +514,56 @@ static const unsigned char bitmaps[] PROGMEM = {
   0b01111110,
   0b00111100,
 
+  // ghost frame 0
+  0b00111110,
+  0b01111111,
+  0b01101101,
+  0b01101101,
+  0b01111111,
+  0b01111111,
+  0b01111111,
+  0b01010101,
+
+  // ghost frame 1
+  0b00111110,
+  0b01111111,
+  0b01011011,
+  0b01011011,
+  0b01111111,
+  0b01111111,
+  0b01111111,
+  0b00101010,
+
 };
 
+
+#define BIG_BITMAP_0 0
+// big bitmaps are 32 pix wide, 8 pix high and have a 2 bit color index per pixel
+// 0b11001100 means 4 pixels: 3, 0, 3, 0
+// color index can be assigned at draw level
+
+static const unsigned char big_bitmaps[] PROGMEM = {
+  // this is supposed to be an x-wing :-)
+  // 1=black 2=orange 3=red
+  0b00000000, 0b00000000, 0b00000000, 0b11110101, 0b01010101, 0b01010101, 0b01010111, 0b11000000, 
+  0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000001, 0b10101010, 0b10010000, 0b00000000, 
+  0b00000000, 0b00000000, 0b00000000, 0b00010101, 0b00000001, 0b01010101, 0b01010000, 0b00000000, 
+  0b00000000, 0b00000000, 0b00000000, 0b01000001, 0b01000110, 0b10101010, 0b01010111, 0b11110000, 
+  0b01010101, 0b01011010, 0b01010101, 0b01010101, 0b01010101, 0b01010101, 0b01010101, 0b11000000, 
+  0b01010101, 0b10101010, 0b10101010, 0b10101010, 0b10100101, 0b01101010, 0b10010111, 0b11110000, 
+  0b00000000, 0b01010101, 0b01010101, 0b01010101, 0b01010110, 0b10101010, 0b10010000, 0b00000000, 
+  0b00000000, 0b00000000, 0b00000000, 0b11110101, 0b01010101, 0b01010101, 0b01010111, 0b11000000, 
+
+  // empty template
+  0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 
+  0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 
+  0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 
+  0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 
+  0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 
+  0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 
+  0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 
+  0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 
+};
 
 // fill patterns for transitions. 8x8 with content 'time of change'
 #define FILL_PATTERN_1 0
@@ -645,6 +695,7 @@ int but_b_val = HIGH;
 int but_counter = 0;
 
 int color_idx = 0;
+int tmp_int;
 
 uint16_t ldr_value;
 uint16_t brightness;
@@ -990,7 +1041,8 @@ void display_bitmap_(int location_offset_x, int location_offset_y, int bitmap_of
         xx = 7 - x + location_offset_x;
         yy = y + location_offset_y;
         if ((xx >= 0) && (xx < 8) && (yy >= 0) && (yy < 8)) {
-          pixels.setPixelColor(xx + yy * 8, pixels.Color(r, g, b));
+          //pixels.setPixelColor(xx + yy * 8, pixels.Color(r, g, b));
+          set_pixel(xx + yy * 8, r, g, b, brightness);
         }
       }
       digit_row = digit_row >> 1;
@@ -1002,6 +1054,44 @@ void display_bitmap(int bitmap_offset, byte r, byte g, byte b) {
   pixels.clear();
   display_bitmap_(0, 0, bitmap_offset, r, g, b);
   pixels.show();
+}
+
+void display_big_bitmap(int location_offset_x, int location_offset_y, int bitmap_offset, 
+  byte r1, byte g1, byte b1,
+  byte r2, byte g2, byte b2,
+  byte r3, byte g3, byte b3) 
+  {
+  byte pixels_value, pix_value;
+  byte xx, yy;
+  byte r, g, b;
+  
+  // screen coords
+  for (int y=0; y<8; y++) {
+    for (int x=0; x<8; x++) {
+        // image source location
+        xx = x + location_offset_x;
+        yy = y + location_offset_y;
+
+        if ((xx < 0) || (xx > 31) || (yy < 0) || (yy > 7)) {
+          continue;
+        }
+        // is slightly inefficient, because most bytes are fetched 4 times, oh well
+        pixels_value = pgm_read_byte(big_bitmaps+bitmap_offset+yy*8+xx/4);  
+        pix_value = (pixels_value >> (2* (3 - xx % 4))) & 0b11;
+        switch(pix_value) {
+          case 0:
+            //r = r0; g=g0; b=b0; break;
+            continue; break;
+          case 1:
+            r = r1; g=g1; b=b1; break;
+          case 2:
+            r = r2; g=g2; b=b2; break;
+          case 3:
+            r = r3; g=g3; b=b3; break;          
+        }
+        set_pixel(y * 8 + x, r, g, b, brightness);
+    }
+  }
 }
 
 void display_color_bitmap(int offset) {
@@ -1443,11 +1533,15 @@ void loop ()
     but_a_val = digitalRead(BUT_A_PIN);
 
     ldr_value = analogRead(LDR_PIN);
-    if (brightness < max(1023 - ldr_value, 10)) {
+    //Serial.println(ldr_value);
+    // offset of a different LDR
+    if (brightness < max(800 - int(float(ldr_value) * 0.9), 20)) {
+    //if (brightness < max(1023 - ldr_value, 10)) {
       brightness++;
     } else {
       brightness--;
     }
+    //brightness = 50;  // for taking pictures only!!!
 
       // button down = entering time set mode
       if (but_a_val == LOW) {
@@ -1623,7 +1717,7 @@ void loop ()
             pgm_mode = PGM_MODE_LO;
             rot_enc.write(clock_mode*4);
             enc_pos = new_enc_pos;
-            display_bitmap(BITMAP_LO, 0, 0, 4);
+            display_bitmap(BITMAP_LO, 0, 0, 20);
             delay(PGM_MODE_SWITCH_DELAY);
           }
           break;
@@ -1703,12 +1797,67 @@ void loop ()
         }
     }
 
-    // hour transition
-    if ((now.minute() == 59) && (now.second() == 59)) {
-      if ((approx_millis / 75) % 2 == 0) {
-        display_bitmap_(8-(approx_millis * 24 / 1000), 0, BITMAP_PACMAN0, 10, 10, 0);
+    // day transition
+    if ((now.hour() == 23) && (now.minute() == 59) && (now.second() >= 57)) {
+      tmp_int = ((((now.second() - 57) % 3) * 900 + approx_millis) * 15 / 1000);
+     // x-wing 1=black 2=orange 3=red
+      display_big_bitmap(
+        tmp_int-8, 0,
+        BIG_BITMAP_0, 
+        5,5,3,
+        50,20,5,
+        20,0,0);
+    }
+
+    // other hour transitions
+    if ((now.hour() != 23) && (now.minute() == 59) && (now.second() >= 58)) {
+      tmp_int = (((now.second() % 2) * 1000 + approx_millis) * 12 / 1000) ;  // reversed x-location
+
+      switch(now.hour() % 5) {
+        
+      case 0:
+      if ((approx_millis / 150) % 2 == 0) {
+        display_bitmap_(8-tmp_int, 0, BITMAP_PACMAN0, 50, 50, 0);
       } else {
-        display_bitmap_(8-(approx_millis * 24 / 1000), 0, BITMAP_PACMAN1, 10, 10, 0);
+        display_bitmap_(8-tmp_int, 0, BITMAP_PACMAN1, 50, 50, 0);
+      }
+      break;
+
+      case 1:
+      // blinky
+      if ((approx_millis / 150) % 2 == 0) {
+        display_bitmap_(8-tmp_int, 0, BITMAP_GHOST0, 50, 0, 0);
+      } else {
+        display_bitmap_(8-tmp_int, 0, BITMAP_GHOST1, 50, 0, 0);
+      }
+      break;
+
+      case 2:
+      // pinky
+      if ((approx_millis / 150) % 2 == 0) {
+        display_bitmap_(8-tmp_int, 0, BITMAP_GHOST0, 50, 20, 30);
+      } else {
+        display_bitmap_(8-tmp_int, 0, BITMAP_GHOST1, 50, 20, 30);
+      }
+      break;
+
+      case 3:
+      // inky
+      if ((approx_millis / 150) % 2 == 0) {
+        display_bitmap_(8-tmp_int, 0, BITMAP_GHOST0, 0, 50, 50);
+      } else {
+        display_bitmap_(8-tmp_int, 0, BITMAP_GHOST1, 0, 50, 50);
+      }
+      break;
+
+      case 4:
+      // clyde
+      if ((approx_millis / 150) % 2 == 0) {
+        display_bitmap_(8-tmp_int, 0, BITMAP_GHOST0, 50, 20, 5);
+      } else {
+        display_bitmap_(8-tmp_int, 0, BITMAP_GHOST1, 50, 20, 5);
+      }
+      break;
       }
     }
     pixels.show();
