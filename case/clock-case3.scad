@@ -13,7 +13,7 @@ OUTER_WIDTH = INNER_WIDTH + 2*SIDE_THICKNESS;
 INNER_HEIGHT = 66;
 OUTER_HEIGHT = INNER_HEIGHT + 2*SIDE_THICKNESS;
 
-ROUNDING_R = 2;
+ROUNDING_R = 3;
 
 HOLDER_OUTER_R = 4;
 HOLDER_INNER_R = 1.3;
@@ -61,11 +61,27 @@ difference() {
            translate([OUTER_WIDTH-(SPHERE_SIDE_OFFSET+SIDE_THICKNESS), OUTER_HEIGHT-(SPHERE_SIDE_OFFSET+SIDE_THICKNESS), DEPTH-SPHERE_HEIGHT+0.2])
            sphere(r=HOOK_SPHERE_R+0.15);
 
+
 }
 
     translate([2-0.7, OUTER_HEIGHT/2-7, 8])
     rotate([0,-90,0])
     logo(2, 12);
+
+    // grid in front, testing
+    for (i=[0:6]) {
+        translate([-0.25+i*8.14+8.14+SIDE_THICKNESS+0.43, 1, 0.1])
+        cube([0.5, OUTER_HEIGHT-2, FRONT_THICKNESS+0.5]);
+    }
+    for (i=[0:6]) {
+        if (i == 6) {
+            translate([1, -0.25+i*8.31+8.31+SIDE_THICKNESS-0.25, 0.1])
+            cube([OUTER_WIDTH-2-9.0, 0.5, FRONT_THICKNESS+0.5]);
+        } else {
+            translate([1, -0.25+i*8.31+8.31+SIDE_THICKNESS-0.25, 0.1])
+            cube([OUTER_WIDTH-2, 0.5, FRONT_THICKNESS+0.5]);
+        }
+    }
 
 }
 }
