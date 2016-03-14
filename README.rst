@@ -20,6 +20,21 @@ http://jh-interact.blogspot.nl/
 
 http://www.thingiverse.com/thing:1372109
 
+Arduino dependencies
+--------------------
+
+Tested and working with these libraries. Many thanks to the authors
+for creating and sharing them!!
+
+- Sodaq_DS3231 by keestux, 1.2.0
+
+- Adafruit NeoPixel 1.0.4
+
+- Adafruit GFX Library 1.1.4
+
+- Encoder by Paul Stoffregen 1.4.0
+
+
 License
 -------
 
