@@ -1,7 +1,7 @@
 /* Knob, originally from raspberry pi fx pedal */
 
 // C = Cylinder, F = Flower
-SHAPE = "C";  
+SHAPE = "F";  
 
 // ** Cylinder options OUTER RADIUS
 CYLINDER_R_OUTER = 26;  // 14, 22, 25
@@ -20,10 +20,10 @@ C_ANGLE = 360 / C_CUT_NUM;
 C_ANGLE_OFFSET = 0.5 * C_ANGLE;  // 0 or 0.5*C_ANGLE 
 
 // ** Flower options
-F_NUM_LEAFS = 3;  // 5, 7, 3
-F_LEAF_OFFSET = 20;  // 20, 20, 20
-F_LEAF_R_INNER = 5;  // 2.5, 2, 5
-F_LEAF_R_OUTER = 2;  // 6, 5, 2
+F_NUM_LEAFS = 5;  // 5, 7, 3
+F_LEAF_OFFSET = 25;  // 20, 20, 20
+F_LEAF_R_INNER = 4;  // 2.5, 2, 5
+F_LEAF_R_OUTER = 1.5;  // 6, 5, 2
 // precalculation, do not change
 F_ANGLE = 360 / F_NUM_LEAFS;
 
@@ -31,17 +31,17 @@ F_ANGLE = 360 / F_NUM_LEAFS;
 // AXLE options
 
 // HEIGHT=13 for 20mm pots/rotary encoders, 10 for 15mm; or through hole, then choose something you like^^
-H = 10;
+H = 8.5;
 
 // D for D shape or N for normal
-AXLE_TYPE = "D";  
+AXLE_TYPE = "N";  
 
 // depth of hole, optionally leave 1 mm on top (H-1) or through hole (H+1)
 AXLE_D = H - 1;  
 // for D axle hole, there is an extra round part
 AXLE_D2 = 2.5;  
 // for 6mm axle
-AXLE_R = 3.1;
+AXLE_R = 3.05;
 
 // for 6mm D shaped axle
 AXLE_D_R = 3.2;
