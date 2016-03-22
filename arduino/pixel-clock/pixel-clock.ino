@@ -1737,6 +1737,7 @@ void draw_clock_word(DateTime dt, RGB col_a, RGB col_b) {
   int uur = -1;  // uur (0)
   byte r, g, b;
   long unsigned int col;
+  float h;
 
   if (dt.minute() < 5) { 
     hour = dt.hour() % 12;
@@ -1778,7 +1779,9 @@ void draw_clock_word(DateTime dt, RGB col_a, RGB col_b) {
     }
   }
 
-  col = hsl_to_rgb((float(dt.second() + 30) / 60), 1, 0.2);
+  h = float(dt.second() + 30) / 60;
+  if (h > 1) {h -= 1; }
+  col = hsl_to_rgb(h, 1, 0.2);
   r = col >> 16;
   g = (col >> 8) & 0xff;
   b = col & 0xff;
@@ -1804,7 +1807,9 @@ void draw_clock_word(DateTime dt, RGB col_a, RGB col_b) {
       break;
   }
 
-  col = hsl_to_rgb(float(dt.hour() + 3) / 23.0, 1, 0.2);
+  h = float(dt.hour() + 3) / 23;
+  if (h > 1) {h -= 1; }
+  col = hsl_to_rgb(h, 1, 0.2);
   r = col >> 16;
   g = (col >> 8) & 0xff;
   b = col & 0xff;
