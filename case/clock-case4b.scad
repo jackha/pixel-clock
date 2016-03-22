@@ -36,6 +36,10 @@ HOOK_SPHERE_R = 2;
 SPHERE_SIDE_OFFSET = 1;
 SPHERE_HEIGHT = 2.5;
 
+echo("OUTER_WIDTH=");
+echo(OUTER_WIDTH);
+echo("OUTER_HEIGHT=");
+echo(OUTER_HEIGHT);
 
 module rounded_cube(x, y, z, r) {
     translate([r,r,0])
@@ -305,7 +309,7 @@ module back() {
    }
 }
 
-//base();
-back();
+base();
+//back();
 
 //pcb_cutout(100,100);
