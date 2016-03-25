@@ -42,8 +42,9 @@ Encoder rot_enc(A2, A1);  // rotary encoder: D5, D6
 #define MODE_GAME_OF_LIFE 12  // conways game of life
 #define MODE_4X4 13  // conways game of life
 #define MODE_WORD 14  // word clock
+#define MODE_ROBOT 15
 
-#define NUM_CLOCK_MODES 15  //
+#define NUM_CLOCK_MODES 16  //
 
 // every time you press button A, the program mode advances
 #define PGM_MODE_TM 0  // time
@@ -436,6 +437,17 @@ static const unsigned char font4x4[] PROGMEM = {
 #define BITMAP_GHOST0 56
 #define BITMAP_GHOST1 64
 
+#define BITMAP_ROBOT_BASE1 72
+#define BITMAP_ROBOT_BASE2 80
+#define BITMAP_ROBOT_BASE3 88
+#define BITMAP_ROBOT_EYES1 96
+#define BITMAP_ROBOT_EYES2 104
+#define BITMAP_ROBOT_ARMS1 112
+#define BITMAP_ROBOT_ARMS2 120
+#define BITMAP_ROBOT_ARMS3 128
+#define BITMAP_ROBOT_LEGS1 136
+#define BITMAP_ROBOT_LEGS2 144
+
 static const unsigned char bitmaps[] PROGMEM = {
   // 'set' aka 'time'
   0b00000000,
@@ -446,24 +458,16 @@ static const unsigned char bitmaps[] PROGMEM = {
   0b11011001,
   0b00000000,
   0b00000000,
-//  0b11101110,
-//  0b01000100,
-//  0b01001110,
-//  0b00000000,
-//  0b11110011,
-//  0b10101011,
-//  0b10101010,
-//  0b00000011,
 
   // lo layout
-  0b10000110,
+  0b11111000,
+  0b10001000,
+  0b10001111,
   0b10001001,
   0b10001001,
-  0b11100110,
-  0b00000000,
-  0b00000000,
-  0b00000000,
-  0b00000000,
+  0b11111001,
+  0b00010001,
+  0b00011111,
 
   // game
   0b01000110,
@@ -535,6 +539,105 @@ static const unsigned char bitmaps[] PROGMEM = {
   0b01111111,
   0b00101010,
 
+  // robot base
+  0b00111100,
+  0b00111100,
+  0b00111100,
+  0b00000000,
+  0b00000000,
+  0b00000000,
+  0b00000000,
+  0b00000000,
+
+  // robot base2
+  0b00000000,
+  0b00000000,
+  0b00000000,
+  0b00111100,
+  0b00111100,
+  0b00000000,
+  0b00000000,
+  0b00000000,
+
+  // robot base3
+  0b00000000,
+  0b01000010,
+  0b00000000,
+  0b00000000,
+  0b00000000,
+  0b00111100,
+  0b00100100,
+  0b00100100,
+
+  // robot eyes1
+  0b00000000,
+  0b01101000,
+  0b00000000,
+  0b00000000,
+  0b00000000,
+  0b00000000,
+  0b00000000,
+  0b00000000,
+
+  // robot eyes2
+  0b00000000,
+  0b00010110,
+  0b00000000,
+  0b00000000,
+  0b00000000,
+  0b00000000,
+  0b00000000,
+  0b00000000,
+
+  // robot arm1
+  0b00000000,
+  0b00000000,
+  0b00000000,
+  0b01000010,
+  0b01000010,
+  0b01000010,
+  0b00000000,
+  0b00000000,
+
+  // robot arm2
+  0b00000000,
+  0b10000000,
+  0b10000000,
+  0b01000010,
+  0b00000010,
+  0b00000010,
+  0b00000000,
+  0b00000000,
+
+  // robot arm3
+  0b00000000,
+  0b00000001,
+  0b00000001,
+  0b01000010,
+  0b01000000,
+  0b01000000,
+  0b00000000,
+  0b00000000,
+
+  // robot leg1
+  0b00000000,
+  0b00000000,
+  0b00000000,
+  0b00000000,
+  0b00000000,
+  0b00000000,
+  0b00000000,
+  0b01101100,
+
+  // robot leg2
+  0b00000000,
+  0b00000000,
+  0b00000000,
+  0b00000000,
+  0b00000000,
+  0b00000000,
+  0b00000000,
+  0b00110110,
 };
 
 
@@ -1877,6 +1980,47 @@ void draw_clock_word(DateTime dt, RGB col_a, RGB col_b) {
   }
 
 }
+/***************************************************************************/
+
+void draw_robot(int eyes, int arms, int legs, RGB col_a, RGB col_b) {
+  display_bitmap_(0, 0, BITMAP_ROBOT_BASE1, col_a.r, col_a.g, col_a.b);
+  display_bitmap_(0, 0, BITMAP_ROBOT_BASE2, col_b.r, col_b.g, col_b.b);
+  display_bitmap_(0, 0, BITMAP_ROBOT_BASE3, 0, 10, 25);
+
+  display_bitmap_(0, 0, arms, 0, 30, 0);
+  display_bitmap_(0, 0, eyes, 0, 0, 0);
+  display_bitmap_(0, 0, legs, 0, 10, 25);
+}
+
+
+void draw_clock_robot(DateTime dt, RGB col_a, RGB col_b) {
+  int arms, eyes, legs;
+
+  pixels.clear();
+  draw_bcd_column(0, dt.hour(), col_a.r, col_a.g, col_a.b);
+  draw_bcd_column(7, dt.minute(), col_b.r, col_b.g, col_b.b);
+
+  if (dt.second() % 2 == 0) {
+    eyes = BITMAP_ROBOT_EYES1;
+  } else {
+    eyes = BITMAP_ROBOT_EYES2;    
+  }
+  if (dt.minute() % 3 == 0) {
+    arms = BITMAP_ROBOT_ARMS1;
+  } else if (dt.minute() % 3 == 1) {
+    arms = BITMAP_ROBOT_ARMS2;    
+  } else {
+    arms = BITMAP_ROBOT_ARMS3;
+  }
+  if (dt.hour() % 2 == 0) {
+    legs = BITMAP_ROBOT_LEGS1;
+  } else {
+    legs = BITMAP_ROBOT_LEGS2;    
+  }
+  draw_robot(eyes, arms, legs, col_a, col_b);
+  pixels.show();
+}
+
 
 void loop () 
 {
@@ -1894,7 +2038,7 @@ void loop ()
     ldr_value = analogRead(LDR_PIN);
     //Serial.println(ldr_value);
     // offset of a different LDR
-    if (brightness < max(800 - int(float(ldr_value) * 0.9), 20)) {
+    if (brightness < max(800 - int(float(ldr_value) * 0.9), 70)) {
     //if (brightness < max(1023 - ldr_value, 10)) {
       brightness++;
     } else {
@@ -2151,6 +2295,9 @@ void loop ()
           break;
         case MODE_WORD:
           draw_clock_word(now, col_a, col_b);
+          break;
+        case MODE_ROBOT:
+          draw_clock_robot(now, col_a, col_b);
           break;
         case MODE_SET_CLOCK:
           // edit clock  
