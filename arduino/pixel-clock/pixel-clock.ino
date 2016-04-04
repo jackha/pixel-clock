@@ -948,6 +948,7 @@ long enc_pos  = -999;  // rotary encoder position
 long neg_enc_pos  = -999;  // rotary encoder position
 long pos_enc_pos  = -999;  // rotary encoder position
 volatile long new_enc_pos = -999;
+volatile long old_enc_pos = -999;  // detection of movement
 uint16_t fast_counter = 0;  // just cycles, for use in timing / moving stuff other than seconds
 
 unsigned long start_approx_millis_time = 0;
@@ -2048,9 +2049,13 @@ void loop ()
        start_approx_millis_time = millis();
     }
     approx_millis = millis() - start_approx_millis_time;
-    if ((last_action_ts - ts) > 300) {
+    if ((ts - last_action_ts) > 300) {
       // go back to default program mode
       pgm_mode = PGM_MODE_LO;
+    }
+    if (old_enc_pos != new_enc_pos) {
+      // detection of movement
+      old_enc_pos = new_enc_pos;
     }
 
     last_but_a_val = but_a_val;
@@ -2071,6 +2076,7 @@ void loop ()
 
       // button down = entering time set mode
       if (but_a_val == LOW) {
+          last_action_ts = ts;
           but_counter += 1;
 
 //          // straight transition
