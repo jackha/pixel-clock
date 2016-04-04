@@ -51,6 +51,7 @@ Encoder rot_enc(A2, A1);  // rotary encoder: D5, D6
 #define PGM_MODE_LO 1  // layout
 #define PGM_MODE_GM 2  // game
 #define PGM_MODE_CO 3  // color
+#define PGM_MODE_BR 4  // brightness
 
 #define PGM_MODE_SWITCH_DELAY 1000
 
@@ -997,6 +998,10 @@ int tmp_int;
 
 uint16_t ldr_value;
 uint16_t brightness;
+uint16_t brightness_offset;
+int brightness_target;
+
+uint32_t last_action_ts;  // when was the last action? too long -> go back to layout mode
 
 ISR(TIMER1_COMPA_vect){  //change the 0 to 1 for timer1 and 2 for timer2
     new_enc_pos = rot_enc.read();
@@ -1050,30 +1055,7 @@ void setup ()
 
   init_game_of_life();  
 
-
-// testing hsl_to_rgb function
-//  long unsigned int col;
-//    col = hsl_to_rgb(0.536, 0.67, 0.28);
-//    Serial.println(int(col >> 16));
-//    Serial.println(int((col >> 8) & 0xff));
-//    Serial.println(int(col & 0xff));
-//
-//  for (int j=0; j<1000; j++) {
-//    col = hsl_to_rgb(float(j) / 1000, 1, 0.1);
-//    pixels.clear();
-//    for (int i=0; i<(col >> 16) >> 5; i++) {
-//      pixels.setPixelColor(i, pixels.Color(col >> 16, (col >> 8) & 0xff, col & 0xff)); 
-//    }
-//    for (int i=0; i<(((col >> 8) & 0xff) >> 5); i++) {
-//      pixels.setPixelColor(i+8, pixels.Color(col >> 16, (col >> 8) & 0xff, col & 0xff)); 
-//    }
-//    for (int i=0; i<((col & 0xff) >> 5); i++) {
-//      pixels.setPixelColor(i+16, pixels.Color(col >> 16, (col >> 8) & 0xff, col & 0xff)); 
-//    }
-//    pixels.show();
-//  delay(10);
-//  }
-
+  last_action_ts = rtc.now().getEpoch(); 
 }
 
 uint32_t old_ts;
@@ -1097,6 +1079,8 @@ void write_eeprom() {
   EEPROM.write(11, col_b.s);
   EEPROM.write(12, col_b.l);
 
+  EEPROM.write(13, brightness_offset >> 8);
+  EEPROM.write(14, brightness_offset && 255);
 }
 
 void read_eeprom() {
@@ -1117,6 +1101,11 @@ void read_eeprom() {
   col_b.h = EEPROM.read(10);
   col_b.s = EEPROM.read(11);
   col_b.l = EEPROM.read(12);
+
+  brightness_offset = EEPROM.read(13) << 8 + EEPROM.read(14);
+  if ((brightness_offset < 0) || (brightness_offset > 400)) {
+    brightness_offset = 100;  // probably first time
+  }
 
   if (clock_mode > NUM_CLOCK_MODES) {
     // problably empty eeprom
@@ -1351,6 +1340,34 @@ void display_bitmap_(int location_offset_x, int location_offset_y, int bitmap_of
 void display_bitmap(int bitmap_offset, byte r, byte g, byte b) {
   pixels.clear();
   display_bitmap_(0, 0, bitmap_offset, r, g, b);
+  pixels.show();
+}
+
+/* standard brighness image */
+void display_brightness() {
+  pixels.clear();
+  for (int y=0; y<8; y++) {
+    for (int x=0; x<8; x++) {
+      set_pixel(y*8+x, 2+x*5, 2+x*5, 2+x*5, brightness);
+    }
+  }
+  pixels.show();
+}
+
+/* display color mode*/
+void display_colors() {
+  byte r,g,b;
+  long unsigned int col;
+  pixels.clear();  
+  for (int y=0; y<8; y++) {
+    for (int x=0; x<8; x++) {
+      col = hsl_to_rgb(float(x) / 8, 1 - float(y) / 8, 0.1);
+      r = col >> 16;
+      g = (col >> 8) & 0xff;
+      b = col & 0xff;
+      set_pixel(y*8+x, r, g, b, brightness);  
+    }
+  }
   pixels.show();
 }
 
@@ -2031,6 +2048,10 @@ void loop ()
        start_approx_millis_time = millis();
     }
     approx_millis = millis() - start_approx_millis_time;
+    if ((last_action_ts - ts) > 300) {
+      // go back to default program mode
+      pgm_mode = PGM_MODE_LO;
+    }
 
     last_but_a_val = but_a_val;
     but_a_val = digitalRead(BUT_A_PIN);
@@ -2038,12 +2059,14 @@ void loop ()
     ldr_value = analogRead(LDR_PIN);
     //Serial.println(ldr_value);
     // offset of a different LDR
-    if (brightness < max(800 - int(float(ldr_value) * 0.9), 70)) {
+    brightness_target = 600 - int(float(ldr_value) * 0.9) + brightness_offset;
+    if (brightness < max(brightness_target, 10)) {
     //if (brightness < max(1023 - ldr_value, 10)) {
       brightness++;
     } else {
       brightness--;
     }
+    //Serial.println(max(600 - int(float(ldr_value) * 0.9) + brightness_offset, 10));
     //brightness = 50;  // for taking pictures only!!!
 
       // button down = entering time set mode
@@ -2090,7 +2113,7 @@ void loop ()
       }
 
       switch (pgm_mode) {
-        case PGM_MODE_TM:
+        case PGM_MODE_TM:  // set time
           if ((last_but_a_val == LOW) && (but_a_val == HIGH)) {  // wait until the button is released
             DateTime dt;
             switch (pgm_mode_tm_state) {
@@ -2163,14 +2186,8 @@ void loop ()
             enc_pos = new_enc_pos;
             pos_enc_pos = col_b.h + 256 * (255-col_b.s) / 64;
             neg_enc_pos = -col_a.h - 256 * (255-col_a.s) / 64;
-            display_color_bitmap(BITMAP_CLR_CO);
+            display_colors();
             delay(PGM_MODE_SWITCH_DELAY);
-//            pgm_mode = PGM_MODE_GM;
-//            rot_enc.write(0);
-//            enc_pos = new_enc_pos;
-//            last_clock_mode = clock_mode;
-//            display_bitmap(BITMAP_GM, 0, 0, 4);
-//            delay(PGM_MODE_SWITCH_DELAY);
           }
           break;
 //        case PGM_MODE_GM:
@@ -2217,6 +2234,28 @@ void loop ()
           // button a readout
           if ((last_but_a_val == LOW) && (but_a_val == HIGH)) {
             write_eeprom();
+            pgm_mode = PGM_MODE_BR;
+            // calculate the encoder position back from current brightness offset
+            rot_enc.write(brightness_offset);  
+            display_brightness();
+            delay(PGM_MODE_SWITCH_DELAY);
+          }
+          break;
+        case PGM_MODE_BR:
+          // encoder readout
+          if (new_enc_pos < 0) {
+            rot_enc.write(0);
+            new_enc_pos = 0;
+          }
+          if (new_enc_pos > 100*4) {
+            rot_enc.write(100*4);
+            new_enc_pos = 100*4;
+          }
+          Serial.println(new_enc_pos);
+          brightness_offset = new_enc_pos;
+          // button a readout
+          if ((last_but_a_val == LOW) && (but_a_val == HIGH)) {
+            write_eeprom();
             pgm_mode = PGM_MODE_LO;
             rot_enc.write(clock_mode*4);
             enc_pos = new_enc_pos;
@@ -2225,13 +2264,6 @@ void loop ()
           }
           break;
       }
-    
-//    enc_pos = new_enc_pos;
-    
-//
-//    if (old_ts == 0 || old_ts != ts) {
-//    	old_ts = ts;
-//    }
 
     // only show stuff when no button is pressed down
     if (but_a_val == HIGH) {
