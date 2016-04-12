@@ -8,9 +8,10 @@ ds3231 realtime clock + 8x8 ws2812 "display" (aka neopixels) = awesome clock!
 #include "font.h"
 #include "bitmap.h"
 #include "table.h"
-#include <EEPROM.h>
-// Date and time functions using RX8025 RTC connected via I2C and Wire lib
 
+#include <EEPROM.h>
+
+// Date and time functions using RX8025 RTC connected via I2C and Wire lib
 #include <Wire.h>
 #include "Sodaq_DS3231.h"
 //#include "pitches.h"  // from: toneMelody
@@ -55,6 +56,8 @@ Encoder rot_enc(A2, A1);  // rotary encoder: D5, D6
 #define PGM_MODE_GM 2  // game
 #define PGM_MODE_CO 3  // color
 #define PGM_MODE_BR 4  // brightness
+
+#define PGM_MODE_TE 5  // tetris
 
 #define PGM_MODE_SWITCH_DELAY 1000
 
@@ -144,6 +147,313 @@ int brightness_target;
 
 uint32_t last_action_ts;  // when was the last action? too long -> go back to layout mode
 
+#define TETRIS_SIZE_X 8
+#define TETRIS_SIZE_Y 10
+byte tetris_playfield[TETRIS_SIZE_Y*TETRIS_SIZE_X]; // we use the 'tetris index' below for its contents, 255 is empty.
+
+
+#define TETRIS_I 0
+#define TETRIS_J 1
+#define TETRIS_L 2
+#define TETRIS_O 3
+#define TETRIS_S 4
+#define TETRIS_T 5
+#define TETRIS_Z 6
+#define TETRIS_EMPTY 255
+
+// RGB colors in order of appearance
+static const unsigned char tetris_colors[] PROGMEM = {
+  0x00, 0xff, 0xff,  // I, cyan
+  0xff, 0x00, 0x00,  // J, blue
+  0xff, 0x80, 0x00,  // L, orange
+  0xff, 0xff, 0x00,  // O, yellow
+  0x00, 0xff, 0x00,  // S, green
+  0xa0, 0x20, 0xf0,  // T, purple
+  0xff, 0x00, 0x00,  // Z, red
+};
+
+static const unsigned char tetris_blocks[] PROGMEM = {
+// I
+  0b0000,
+  0b1111,
+  0b0000,
+  0b0000,
+
+  0b0010,
+  0b0010,
+  0b0010,
+  0b0010,
+
+  0b0000,
+  0b0000,
+  0b1111,
+  0b0000,
+
+  0b0100,
+  0b0100,
+  0b0100,
+  0b0100,
+
+// J
+  0b1000,
+  0b1110,
+  0b0000,
+  0b0000,
+
+  0b0110,
+  0b0100,
+  0b0100,
+  0b0000,
+
+  0b0000,
+  0b1110,
+  0b0010,
+  0b0000,
+
+  0b0100,
+  0b0100,
+  0b1100,
+  0b0000,
+
+// L
+  0b0100,
+  0b0100,
+  0b0110,
+  0b0000,
+
+  0b0000,
+  0b1110,
+  0b1000,
+  0b0000,
+
+  0b1100,
+  0b0100,
+  0b0100,
+  0b0000,
+
+  0b0010,
+  0b1110,
+  0b0000,
+  0b0000,
+// O
+  0b0110,
+  0b0110,
+  0b0000,
+  0b0000,
+
+  0b0110,
+  0b0110,
+  0b0000,
+  0b0000,
+
+  0b0110,
+  0b0110,
+  0b0000,
+  0b0000,
+
+  0b0110,
+  0b0110,
+  0b0000,
+  0b0000,
+
+// S
+  0b0110,
+  0b1100,
+  0b0000,
+  0b0000,
+
+  0b0100,
+  0b0110,
+  0b0010,
+  0b0000,
+
+  0b0000,
+  0b0110,
+  0b1100,
+  0b0000,
+
+  0b1000,
+  0b1100,
+  0b0100,
+  0b0000,
+
+// T
+  0b0100,
+  0b1110,
+  0b0000,
+  0b0000,
+
+  0b0100,
+  0b0110,
+  0b0100,
+  0b0000,
+
+  0b0000,
+  0b1110,
+  0b0100,
+  0b0000,
+
+  0b0100,
+  0b1100,
+  0b0100,
+  0b0000,
+
+// Z
+  0b1100,
+  0b0110,
+  0b0000,
+  0b0000,
+
+  0b0010,
+  0b0110,
+  0b0100,
+  0b0000,
+
+  0b0000,
+  0b1100,
+  0b0110,
+  0b0000,
+
+  0b0100,
+  0b1100,
+  0b1000,
+  0b0000,
+};
+
+void reset_tetris() {
+  for (int y=0; y<TETRIS_SIZE_Y; y++) {
+    for (int x=0; x<TETRIS_SIZE_X; x++) {
+      tetris_playfield[y*TETRIS_SIZE_X+x] = TETRIS_EMPTY;
+    }
+  }
+}
+
+// block 0..6, rotation 0..3
+// return true if collision or out of bounds, false if ok
+boolean tetris_check_collision(int x_, int y_, int block, int rotation) {
+  byte tetromino_row;
+  int tetromino_offset = block*16 + (rotation % 4)*4;
+  byte xx, yy;
+  for (int y=0; y<4; y++) {
+    tetromino_row = pgm_read_byte(tetris_blocks+tetromino_offset+y);
+    for (int x=0; x<4; x++) {
+      if ((tetromino_row & 0b1) > 0) {
+        xx = 3 - x + x_;
+        yy = y + y_;
+        if ((xx >= 0) && (xx < TETRIS_SIZE_X) && (yy >= 0) && (yy < TETRIS_SIZE_Y)) {
+          //set_pixel(xx + yy * 8, r, g, b, brightness);
+          if (tetris_playfield[yy*TETRIS_SIZE_X+xx] != TETRIS_EMPTY) {
+            return true;
+          }
+        } else {
+          return true;  // one of the blocks is out of bounds
+        }
+      }
+      tetromino_row = tetromino_row >> 1;
+    }
+  }
+  return false;
+}
+
+// display playfield, special function for 8x8 display
+// hope this is fast
+void tetris_display(int x_offset, int y_offset, int brightness) {
+  byte r, g, b;
+  byte tetromino;
+  for (int y=0; y<8; y++) {
+    for (int x=0; x<8; x++) {
+      tetromino = tetris_playfield[(y+y_offset)*8+x+x_offset];
+      if (tetromino != TETRIS_EMPTY) {
+        r = pgm_read_byte(tetris_colors + 3 * tetromino + 0);
+        g = pgm_read_byte(tetris_colors + 3 * tetromino + 1);
+        b = pgm_read_byte(tetris_colors + 3 * tetromino + 2);
+
+        set_pixel(y*8+x, r, g, b, brightness);  
+      }
+    }
+  }
+}
+
+// just 'plot' the piece in place, no collision check
+void tetris_place_tetromino(int x_, int y_, int block, int rotation) {
+  byte tetromino_row;
+  int tetromino_offset = block*16 + (rotation % 4)*4;
+  byte xx, yy;
+  for (int y=0; y<4; y++) {
+    tetromino_row = pgm_read_byte(tetris_blocks+tetromino_offset+y);
+    for (int x=0; x<4; x++) {
+      if ((tetromino_row & 0b1) > 0) {
+        xx = 3 - x + x_;
+        yy = y + y_;
+        if ((xx >= 0) && (xx < TETRIS_SIZE_X) && (yy >= 0) && (yy < TETRIS_SIZE_Y)) {
+          tetris_playfield[yy*TETRIS_SIZE_X+xx] = block;
+        }
+      }
+      tetromino_row = tetromino_row >> 1;
+    }
+  }  
+}
+
+void tetris() {
+  reset_tetris();
+  int block = TETRIS_S;
+  int rotation = 1;
+  int x = 3;
+  int y = 0;
+  boolean game_over = false;
+  long int current_millis = millis();
+  long int next_move_millis;
+  int block_duration = 500;
+
+  int but_a_val, last_but_a_val;
+  long int enc_pos;
+  rot_enc.write(0);
+
+  while (!game_over) {
+    block = (block + 1) % 7;  // TODO: implement "Random Generator"
+    rotation = (rotation + 1) % 4;
+    x = 3-rotation;
+    y = 0;
+    game_over = tetris_check_collision(x, y+1, block, rotation) && (y == 0);
+    next_move_millis = current_millis + block_duration;
+    while (!tetris_check_collision(x, y+1, block, rotation)) {
+      pixels.clear();
+      // provide offset of playfield and brightness
+      tetris_display(0, 2, 100);
+      // convert playfield coordinates to screen coordinates
+      display_tetromino(x, y-2, block, rotation, 100);  
+      pixels.show();
+      current_millis = millis();
+      if (current_millis > next_move_millis) {
+        y += 1;
+        next_move_millis = current_millis + block_duration;
+      }
+      // game controls
+      last_but_a_val = but_a_val;
+      but_a_val = digitalRead(BUT_A_PIN);
+      enc_pos = new_enc_pos / 4;
+      if ((enc_pos < 0) && (!tetris_check_collision(x-1, y, block, rotation))) {
+        x -= 1;
+        rot_enc.write(0);
+      }
+      if ((enc_pos > 0) && (!tetris_check_collision(x+1, y, block, rotation))) {
+        x += 1;
+        rot_enc.write(0);
+      }
+      if (
+        (but_a_val == LOW) && 
+        (last_but_a_val == HIGH) && 
+        (!tetris_check_collision(x+1, y, block, (rotation + 1) % 4))) {
+          
+        rotation = (rotation + 1) % 4;
+      }
+    }
+    tetris_place_tetromino(x, y, block, rotation);
+    // TODO: check for full lines and shift all
+  }
+  delay(1000);
+}
+
 ISR(TIMER1_COMPA_vect){  //change the 0 to 1 for timer1 and 2 for timer2
     new_enc_pos = rot_enc.read();
 }
@@ -197,6 +507,22 @@ void setup ()
   init_game_of_life();  
 
   last_action_ts = rtc.now().getEpoch(); 
+
+// testing tetris stuff
+//
+//  for (int b=0; b<7; b++) {
+//  for (int y=-4; y<9; y++) {
+//    pixels.clear();
+//   display_tetromino(3, y, b*16 + (y/4)*4, 100);
+////   display_tetromino(4, 0, TETRIS_Z + 1*4, 100);
+////   display_tetromino(0, 4, TETRIS_I + 0*4, 100);
+////   display_tetromino(4, 4, TETRIS_O + 2*4, 100);
+//   delay(100);
+//   pixels.show();
+//  }
+//  }
+//  delay(1000);
+  tetris();
 }
 
 uint32_t old_ts;
@@ -373,170 +699,6 @@ void draw_clock_4x4(DateTime dt, RGB col_a, RGB col_b) {
 //  }
 }
 
-
-/***************************************************************************/
-void draw_word(int start, byte r, byte g, byte b) {
-  byte digit_row;
-  for (int y=0; y<8; y++) {
-    digit_row = pgm_read_byte(wordmap+start+y);
-    for (int x=0; x<8; x++) {
-      if ((digit_row & 0b1) > 0) {
-        set_pixel((7 - x) + y * 8, r, g, b, brightness);
-      }
-      digit_row = digit_row >> 1;
-    }
-  }
-  
-}
-
-void draw_clock_word(DateTime dt, RGB col_a, RGB col_b) {
-  int hour;
-  int minute = -1;  // vijf (0), tien (1) or kwart (2)
-  int over_voor = -1;  // voor (0), over (1)
-  int half = -1;  // half (0)
-  int uur = -1;  // uur (0)
-  byte r, g, b;
-  long unsigned int col;
-  float h;
-
-  if (dt.minute() < 5) { 
-    hour = dt.hour() % 12;
-    minute = dt.minute() / 5 - 1;
-    uur = 0;
-  } else if (dt.minute() < 20) { 
-    hour = dt.hour() % 12;
-    minute = dt.minute() / 5 - 1;
-    over_voor = 1;
-  } else {
-    hour = (dt.hour() + 1) % 12;
-    if ((dt.minute() >= 20) && (dt.minute() < 25)) {
-      minute = 1;
-      over_voor = 0;
-      half = 0;
-    } else if ((dt.minute() >= 25) && (dt.minute() < 30)) {
-      minute = 0;
-      over_voor = 0;
-      half = 0;
-    } else if ((dt.minute() >= 30) && (dt.minute() < 35)) {
-      half = 0;
-    } else if ((dt.minute() >= 35) && (dt.minute() < 40)) {
-      minute = 0;
-      over_voor = 1;
-      half = 0;
-    } else if ((dt.minute() >= 40) && (dt.minute() < 45)) {
-      minute = 1;
-      over_voor = 1;
-      half = 0;
-    } else if ((dt.minute() >= 45) && (dt.minute() < 50)) {
-      minute = 2;
-      over_voor = 0;
-    } else if ((dt.minute() >= 50) && (dt.minute() < 55)) {
-      minute = 1;
-      over_voor = 0;
-    } else if ((dt.minute() >= 55)) {
-      minute = 0;
-      over_voor = 0;
-    }
-  }
-
-  h = float(dt.second() + 30) / 60;
-  if (h > 1) {h -= 1; }
-  col = hsl_to_rgb(h, 1, 0.2);
-  r = col >> 16;
-  g = (col >> 8) & 0xff;
-  b = col & 0xff;
-
-  if (half == 0) {
-      draw_word(WORD_HALF, r, g, b);
-  }
-
-  col = hsl_to_rgb(float(dt.second()) / 60, 1, 0.2);
-  r = col >> 16;
-  g = (col >> 8) & 0xff;
-  b = col & 0xff;
-
-  switch(minute) { 
-    case 0:
-      draw_word(WORD_VIJF_, r, g, b);
-      break;
-    case 1:
-      draw_word(WORD_TIEN_, r, g, b);
-      break;
-    case 2:
-      draw_word(WORD_KWART, r, g, b);
-      break;
-  }
-
-  h = float(dt.hour() + 3) / 23;
-  if (h > 1) {h -= 1; }
-  col = hsl_to_rgb(h, 1, 0.2);
-  r = col >> 16;
-  g = (col >> 8) & 0xff;
-  b = col & 0xff;
-
-  switch(over_voor) { 
-    case 0:
-      draw_word(WORD_VOOR, r, g, b);
-      break;
-    case 1:
-      draw_word(WORD_OVER, r, g, b);
-      break;
-  }
-
-  col = hsl_to_rgb(float(dt.hour()) / 23.0, 1, 0.28);
-  r = col >> 16;
-  g = (col >> 8) & 0xff;
-  b = col & 0xff;
-  
-  switch(hour) { 
-    case 0:
-      draw_word(WORD_TWAALF, r, g, b);
-      break;
-    case 1:
-      draw_word(WORD_EEN, r, g, b);
-      break;
-    case 2:
-      draw_word(WORD_TWEE, r, g, b);
-      break;
-    case 3:
-      draw_word(WORD_DRIE, r, g, b);
-      break;
-    case 4:
-      draw_word(WORD_VIER, r, g, b);
-      break;
-    case 5:
-      draw_word(WORD_VIJF, r, g, b);
-      break;
-    case 6:
-      draw_word(WORD_ZES, r, g, b);
-      break;
-    case 7:
-      draw_word(WORD_ZEVEN, r, g, b);
-      break;
-    case 8:
-      draw_word(WORD_ACHT, r, g, b);
-      break;
-    case 9:
-      draw_word(WORD_NEGEN, r, g, b);
-      break;
-    case 10:
-      draw_word(WORD_TIEN, r, g, b);
-      break;
-    case 11:
-      draw_word(WORD_ELF, r, g, b);
-      break;
-  }
-
-  col = hsl_to_rgb(float(dt.dayOfWeek()) / 6.0, 1, 0.28);
-  r = col >> 16;
-  g = (col >> 8) & 0xff;
-  b = col & 0xff;
-
-  if (uur == 0) {
-      draw_word(WORD_UUR, r, g, b);
-  }
-
-}
 /***************************************************************************/
 
 void draw_robot(int eyes, int arms, int legs, RGB col_a, RGB col_b) {

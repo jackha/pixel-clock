@@ -258,6 +258,30 @@ unsigned long hsl_to_rgb(float h, float s, float l) {
 }
 
 /***************************************************************************/
+
+void display_tetromino(int location_offset_x, int location_offset_y, int tetromino, int rotation, int brightness) {
+  byte digit_row;
+  byte xx, yy;
+  byte r, g, b;
+  r = pgm_read_byte(tetris_colors + 3 * tetromino + 0);
+  g = pgm_read_byte(tetris_colors + 3 * tetromino + 1);
+  b = pgm_read_byte(tetris_colors + 3 * tetromino + 2);
+  for (int y=0; y<4; y++) {
+    digit_row = pgm_read_byte(tetris_blocks+tetromino*16+rotation*4+y);
+    for (int x=0; x<4; x++) {
+      if ((digit_row & 0b1) > 0) {
+        xx = 3 - x + location_offset_x;
+        yy = y + location_offset_y;
+        if ((xx >= 0) && (xx < 8) && (yy >= 0) && (yy < 8)) {
+          //pixels.setPixelColor(xx + yy * 8, pixels.Color(r, g, b));
+          set_pixel(xx + yy * 8, r, g, b, brightness);
+        }
+      }
+      digit_row = digit_row >> 1;
+    }
+  }
+}
+
 void display_bitmap_(int location_offset_x, int location_offset_y, int bitmap_offset, byte r, byte g, byte b) {
   byte digit_row;
   byte xx, yy;
