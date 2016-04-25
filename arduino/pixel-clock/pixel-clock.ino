@@ -966,7 +966,7 @@ void loop ()
             pgm_mode = PGM_MODE_LO;
             rot_enc.write(clock_mode*4);
             enc_pos = new_enc_pos;
-            display_bitmap(BITMAP_LO, 0, 0, 20);
+            display_bitmap(BITMAP_LO, 0, 0, 200);
             delay(PGM_MODE_SWITCH_DELAY);
           }
           break;

@@ -312,7 +312,7 @@ void display_brightness() {
   pixels.clear();
   for (int y=0; y<8; y++) {
     for (int x=0; x<8; x++) {
-      set_pixel(y*8+x, 2+x*5, 2+x*5, 2+x*5, brightness);
+      set_pixel(y*8+x, 2+x*5, 2+x*5, 2+x*5, 100);
     }
   }
   pixels.show();
@@ -329,7 +329,7 @@ void display_colors() {
       r = col >> 16;
       g = (col >> 8) & 0xff;
       b = col & 0xff;
-      set_pixel(y*8+x, r, g, b, brightness);  
+      set_pixel(y*8+x, r, g, b, 100);  
     }
   }
   pixels.show();
